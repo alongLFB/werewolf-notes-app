@@ -6,43 +6,19 @@ import { PlayerCard } from "@/components/PlayerCard";
 import { RoleSelector } from "@/components/RoleSelector";
 import { GameControlPanel } from "@/components/GameControlPanel";
 import { VotingPanel } from "@/components/VotingPanel";
-import { NightActionPanel } from "@/components/NightActionPanel";
-import { SheriffElectionPanel } from "@/components/SheriffElectionPanel";
-import { GameLogPanel } from "@/components/GameLogPanel";
 import { RoleType } from "@/types/game";
 import { ROLE_CONFIGS } from "@/lib/constants";
-import {
-  Plus,
-  Settings,
-  Users,
-  Eye,
-  EyeOff,
-  GamepadIcon,
-  Sun,
-  Moon,
-  Shield,
-  FileText,
-  RotateCcw,
-} from "lucide-react";
+import { Plus, Settings, Users, Eye, EyeOff, GamepadIcon } from "lucide-react";
 
 export default function Home() {
-  const {
-    currentGame,
-    games,
-    createGame,
-    loadGame,
-    setPlayerRole,
-    finishGame,
-  } = useGameStore();
+  const { currentGame, games, createGame, loadGame, setPlayerRole } =
+    useGameStore();
 
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [selectedPlayer, setSelectedPlayer] = useState<number | null>(null);
   const [showRoles, setShowRoles] = useState(true);
   const [gameName, setGameName] = useState("");
   const [selectedConfig, setSelectedConfig] = useState(0);
-  const [activeTab, setActiveTab] = useState<
-    "day" | "night" | "sheriff" | "log"
-  >("day");
 
   const handleCreateGame = () => {
     if (gameName.trim()) {
@@ -75,10 +51,10 @@ export default function Home() {
           {/* 创建新游戏 */}
           <div className="bg-white rounded-lg shadow-lg p-6 mb-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-xl font-bold text-gray-900">创建新游戏</h2>
+              <h2 className="text-xl font-bold">创建新游戏</h2>
               <button
                 onClick={() => setShowCreateForm(!showCreateForm)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors duration-200 font-medium"
+                className="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center space-x-2 transition-colors duration-200"
               >
                 <Plus className="w-4 h-4" />
                 <span>新游戏</span>
@@ -88,7 +64,7 @@ export default function Home() {
             {showCreateForm && (
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-800 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     游戏名称
                   </label>
                   <input
@@ -96,12 +72,12 @@ export default function Home() {
                     value={gameName}
                     onChange={(e) => setGameName(e.target.value)}
                     placeholder="输入游戏名称"
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-800 mb-2">
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
                     游戏配置
                   </label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -115,13 +91,11 @@ export default function Home() {
                             : "border-gray-300 hover:border-gray-400"
                         }`}
                       >
-                        <div className="font-medium text-gray-900">
-                          {config.name}
-                        </div>
-                        <div className="text-sm text-gray-700">
+                        <div className="font-medium">{config.name}</div>
+                        <div className="text-sm text-gray-600">
                           {config.description}
                         </div>
-                        <div className="text-xs text-gray-600 mt-1">
+                        <div className="text-xs text-gray-500 mt-1">
                           {config.playerCount}人局
                         </div>
                       </button>
@@ -132,7 +106,7 @@ export default function Home() {
                 <button
                   onClick={handleCreateGame}
                   disabled={!gameName.trim()}
-                  className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:text-gray-200 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200"
+                  className="w-full bg-green-500 hover:bg-green-600 disabled:bg-gray-300 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200"
                 >
                   创建游戏
                 </button>
@@ -143,7 +117,7 @@ export default function Home() {
           {/* 历史游戏 */}
           {games.length > 0 && (
             <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-xl font-bold mb-4 text-gray-900">历史游戏</h2>
+              <h2 className="text-xl font-bold mb-4">历史游戏</h2>
               <div className="space-y-3">
                 {games.map((game) => (
                   <div
@@ -152,18 +126,16 @@ export default function Home() {
                     onClick={() => loadGame(game.id)}
                   >
                     <div>
-                      <div className="font-medium text-gray-900">
-                        {game.name}
-                      </div>
-                      <div className="text-sm text-gray-700">
+                      <div className="font-medium">{game.name}</div>
+                      <div className="text-sm text-gray-600">
                         {game.playerCount}人局 ·{" "}
                         {game.status === "ongoing" ? "进行中" : "已结束"}
                       </div>
-                      <div className="text-xs text-gray-600">
+                      <div className="text-xs text-gray-500">
                         {new Date(game.updatedAt).toLocaleString()}
                       </div>
                     </div>
-                    <GamepadIcon className="w-5 h-5 text-gray-500" />
+                    <GamepadIcon className="w-5 h-5 text-gray-400" />
                   </div>
                 ))}
               </div>
@@ -191,7 +163,7 @@ export default function Home() {
             <div className="flex items-center space-x-4">
               <button
                 onClick={() => setShowRoles(!showRoles)}
-                className="flex items-center space-x-2 px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors duration-200 text-gray-900 font-medium"
+                className="flex items-center space-x-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200"
               >
                 {showRoles ? (
                   <>
@@ -206,7 +178,7 @@ export default function Home() {
                 )}
               </button>
 
-              <button className="flex items-center space-x-2 px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors duration-200 text-gray-900 font-medium">
+              <button className="flex items-center space-x-2 px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors duration-200">
                 <Settings className="w-4 h-4" />
                 <span>设置</span>
               </button>
@@ -237,82 +209,14 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 游戏阶段标签 */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <div className="flex space-x-1 mb-6">
-                <button
-                  onClick={() => setActiveTab("day")}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
-                    activeTab === "day"
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                  }`}
-                >
-                  <Sun className="w-4 h-4" />
-                  <span>白天投票</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab("night")}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
-                    activeTab === "night"
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                  }`}
-                >
-                  <Moon className="w-4 h-4" />
-                  <span>夜间行动</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab("sheriff")}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
-                    activeTab === "sheriff"
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                  }`}
-                >
-                  <Shield className="w-4 h-4" />
-                  <span>警长竞选</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab("log")}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
-                    activeTab === "log"
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                  }`}
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>游戏日志</span>
-                </button>
-              </div>
-
-              {/* 标签内容 */}
-              {activeTab === "day" && <VotingPanel />}
-              {activeTab === "night" && <NightActionPanel />}
-              {activeTab === "sheriff" && <SheriffElectionPanel />}
-              {activeTab === "log" && <GameLogPanel />}
-            </div>
+            {/* 投票面板 */}
+            <VotingPanel />
           </div>
 
           {/* 右侧控制面板 */}
           <div className="space-y-6">
             {/* 游戏控制 */}
             <GameControlPanel />
-
-            {/* 结束游戏按钮 */}
-            <div className="bg-white rounded-lg shadow-lg p-6">
-              <button
-                onClick={() => {
-                  if (confirm("确定要结束当前游戏吗？")) {
-                    finishGame();
-                  }
-                }}
-                className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
-              >
-                <RotateCcw className="w-4 h-4" />
-                <span>结束游戏</span>
-              </button>
-            </div>
 
             {/* 角色选择 */}
             {selectedPlayer && (
