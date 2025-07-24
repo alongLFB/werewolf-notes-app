@@ -9,8 +9,8 @@ export const NightActionPanel: React.FC = () => {
     currentGame,
     getAlivePlayers,
     addNightAction,
-    addNightDeath,
-    addActionLog,
+    resolveNightActions,
+    isCurrentRoundResolved,
   } = useGameStore();
 
   const [selectedActor, setSelectedActor] = useState<number | null>(null);
@@ -36,43 +36,8 @@ export const NightActionPanel: React.FC = () => {
 
     addNightAction(action);
 
-    // 添加日志
-    const actorName =
-      currentGame.players.find((p) => p.id === selectedActor)?.name ||
-      `玩家${selectedActor}`;
-    const targetName = selectedTarget
-      ? currentGame.players.find((p) => p.id === selectedTarget)?.name ||
-        `玩家${selectedTarget}`
-      : "无目标";
-
-    let logMessage = "";
-    switch (actionType) {
-      case "werewolf_kill":
-        logMessage = `${actorName}(狼人)击杀了${targetName}`;
-        if (selectedTarget) {
-          addNightDeath(selectedTarget, "狼人击杀");
-        }
-        break;
-      case "seer_check":
-        logMessage = `${actorName}(预言家)查验了${targetName}，结果：${
-          actionResult || "未知"
-        }`;
-        break;
-      case "witch_save":
-        logMessage = `${actorName}(女巫)使用解药救了${targetName}`;
-        break;
-      case "witch_poison":
-        logMessage = `${actorName}(女巫)使用毒药毒死了${targetName}`;
-        if (selectedTarget) {
-          addNightDeath(selectedTarget, "女巫毒死");
-        }
-        break;
-      case "guard_protect":
-        logMessage = `${actorName}(守卫)保护了${targetName}`;
-        break;
-    }
-
-    addActionLog(logMessage, true);
+    // 不在这里处理死亡，所有死亡都在夜晚结算时统一处理
+    // 这样可以确保优先级和相互作用的正确处理
 
     // 重置表单
     setSelectedActor(null);
@@ -216,6 +181,22 @@ export const NightActionPanel: React.FC = () => {
         >
           <Plus className="w-4 h-4" />
           <span>记录行动</span>
+        </button>
+
+        {/* 夜晚结算按钮 */}
+        <button
+          onClick={() => {
+            if (confirm("确定要结算夜晚行动吗？这将处理所有夜间行动的结果。")) {
+              resolveNightActions();
+            }
+          }}
+          disabled={isCurrentRoundResolved()}
+          className="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-400 disabled:text-gray-200 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
+        >
+          <Moon className="w-4 h-4" />
+          <span>
+            {isCurrentRoundResolved() ? "夜晚已结算" : "结算夜晚行动"}
+          </span>
         </button>
       </div>
 

@@ -181,10 +181,19 @@ export default function Home() {
         <div className="max-w-7xl mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             <div className="flex items-center space-x-4">
-              <h1 className="text-xl font-bold">🐺 {currentGame.name}</h1>
-              <div className="flex items-center space-x-2 text-sm text-gray-600">
+              <h1 className="text-xl font-bold text-gray-900">
+                🐺 {currentGame.name}
+              </h1>
+              <div className="flex items-center space-x-2 text-sm text-gray-800 font-medium">
                 <Users className="w-4 h-4" />
                 <span>{currentGame.playerCount}人局</span>
+              </div>
+              <div className="flex items-center space-x-2 text-sm text-gray-800 font-medium">
+                <span>第{currentGame.currentRound}回合</span>
+                <span>·</span>
+                <span>
+                  {currentGame.currentPhase === "day" ? "白天" : "夜晚"}
+                </span>
               </div>
             </div>
 
@@ -221,7 +230,7 @@ export default function Home() {
           <div className="lg:col-span-3 space-y-6">
             {/* 玩家座位图 */}
             <div className="bg-white rounded-lg shadow-lg p-6">
-              <h2 className="text-lg font-bold mb-4">玩家座位</h2>
+              <h2 className="text-lg font-bold mb-4 text-gray-900">玩家座位</h2>
               <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
                 {currentGame.players.map((player) => (
                   <PlayerCard

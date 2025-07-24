@@ -9,6 +9,8 @@ export const VotingPanel: React.FC = () => {
     addVote,
     eliminatePlayer,
     getCurrentRound,
+    resolveDayVoting,
+    isCurrentRoundResolved,
   } = useGameStore();
 
   const [selectedVoter, setSelectedVoter] = useState<number | null>(null);
@@ -133,6 +135,24 @@ export const VotingPanel: React.FC = () => {
           className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:text-gray-200 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
         >
           记录投票
+        </button>
+
+        {/* 白天结算按钮 */}
+        <button
+          onClick={() => {
+            if (
+              confirm("确定要结算白天投票吗？这将统计投票结果并确定出局玩家。")
+            ) {
+              resolveDayVoting();
+            }
+          }}
+          disabled={votes.length === 0 || isCurrentRoundResolved()}
+          className="w-full bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 disabled:text-gray-200 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
+        >
+          <Users className="w-4 h-4" />
+          <span>
+            {isCurrentRoundResolved() ? "白天已结算" : "结算白天投票"}
+          </span>
         </button>
       </div>
 

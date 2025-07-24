@@ -9,10 +9,9 @@ export const SheriffElectionPanel: React.FC = () => {
     addPoliceCandidate,
     removePoliceCandidate,
     electSheriff,
-    addActionLog,
   } = useGameStore();
 
-  const [selectedPlayer, setSelectedPlayer] = useState<number | null>(null);
+  const [selectedPlayers, setSelectedPlayers] = useState<number[]>([]);
 
   if (!currentGame || currentGame.currentPhase !== "day") return null;
 
@@ -23,31 +22,31 @@ export const SheriffElectionPanel: React.FC = () => {
   const policeElection = currentRound?.policeElection;
   const candidates = policeElection?.candidates || [];
 
-  const handleAddCandidate = () => {
-    if (!selectedPlayer) return;
+  const handleTogglePlayer = (playerId: number) => {
+    setSelectedPlayers((prev) =>
+      prev.includes(playerId)
+        ? prev.filter((id) => id !== playerId)
+        : [...prev, playerId]
+    );
+  };
 
-    addPoliceCandidate(selectedPlayer);
-    const playerName =
-      currentGame.players.find((p) => p.id === selectedPlayer)?.name ||
-      `玩家${selectedPlayer}`;
-    addActionLog(`${playerName}上警竞选警长`);
-    setSelectedPlayer(null);
+  const handleAddCandidates = () => {
+    if (selectedPlayers.length === 0) return;
+
+    selectedPlayers.forEach((playerId) => {
+      if (!candidates.includes(playerId)) {
+        addPoliceCandidate(playerId);
+      }
+    });
+    setSelectedPlayers([]);
   };
 
   const handleRemoveCandidate = (playerId: number) => {
     removePoliceCandidate(playerId);
-    const playerName =
-      currentGame.players.find((p) => p.id === playerId)?.name ||
-      `玩家${playerId}`;
-    addActionLog(`${playerName}退出警长竞选`);
   };
 
   const handleElectSheriff = (playerId: number) => {
     electSheriff(playerId);
-    const playerName =
-      currentGame.players.find((p) => p.id === playerId)?.name ||
-      `玩家${playerId}`;
-    addActionLog(`${playerName}当选警长`);
   };
 
   return (
@@ -75,36 +74,33 @@ export const SheriffElectionPanel: React.FC = () => {
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-800 mb-2">
-            添加上警候选人
+            选择上警候选人（可多选）
           </label>
-          <div className="flex space-x-3">
-            <select
-              value={selectedPlayer || ""}
-              onChange={(e) =>
-                setSelectedPlayer(
-                  e.target.value ? parseInt(e.target.value) : null
-                )
-              }
-              className="flex-1 border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-            >
-              <option value="">选择玩家</option>
-              {alivePlayers
-                .filter((player) => !candidates.includes(player.id))
-                .map((player) => (
-                  <option key={player.id} value={player.id}>
-                    {player.name || `玩家${player.id}`} ({player.id}号)
-                  </option>
-                ))}
-            </select>
-            <button
-              onClick={handleAddCandidate}
-              disabled={!selectedPlayer}
-              className="bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center space-x-2"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>上警</span>
-            </button>
+          <div className="grid grid-cols-2 gap-2 mb-3">
+            {alivePlayers
+              .filter((player) => !candidates.includes(player.id))
+              .map((player) => (
+                <button
+                  key={player.id}
+                  onClick={() => handleTogglePlayer(player.id)}
+                  className={`p-2 border rounded-lg text-sm transition-colors duration-200 ${
+                    selectedPlayers.includes(player.id)
+                      ? "bg-blue-100 border-blue-500 text-blue-700"
+                      : "bg-gray-100 border-gray-300 text-gray-700 hover:bg-gray-200"
+                  }`}
+                >
+                  {player.name || `玩家${player.id}`} ({player.id}号)
+                </button>
+              ))}
           </div>
+          <button
+            onClick={handleAddCandidates}
+            disabled={selectedPlayers.length === 0}
+            className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white px-4 py-2 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
+          >
+            <UserPlus className="w-4 h-4" />
+            <span>批量上警 ({selectedPlayers.length}人)</span>
+          </button>
         </div>
       </div>
 

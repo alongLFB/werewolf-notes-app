@@ -3,14 +3,44 @@ import { useGameStore } from "@/store/gameStore";
 import { SkipForward, Users, Clock, Sun, Moon, Trophy } from "lucide-react";
 
 export const GameControlPanel: React.FC = () => {
-  const { currentGame, nextPhase, getCampCounts, getAlivePlayers } =
-    useGameStore();
+  const {
+    currentGame,
+    nextPhase,
+    getCampCounts,
+    getAlivePlayers,
+    getCurrentRound,
+  } = useGameStore();
 
   if (!currentGame) return null;
 
   const campCounts = getCampCounts();
   const alivePlayers = getAlivePlayers();
   const isDay = currentGame.currentPhase === "day";
+  const currentRound = getCurrentRound();
+
+  const handlePhaseChange = () => {
+    if (isDay) {
+      // 白天转夜晚
+      const hasVotes = currentRound?.votes && currentRound.votes.length > 0;
+      if (hasVotes) {
+        const confirm = window.confirm(
+          "当前有投票记录，建议先进行白天投票结算。确定要直接进入夜晚吗？"
+        );
+        if (!confirm) return;
+      }
+    } else {
+      // 夜晚转白天
+      const hasNightActions =
+        currentRound?.nightActions && currentRound.nightActions.length > 0;
+      if (hasNightActions) {
+        const confirm = window.confirm(
+          "当前有夜间行动记录，建议先进行夜晚行动结算。确定要直接进入白天吗？"
+        );
+        if (!confirm) return;
+      }
+    }
+    nextPhase();
+  };
 
   return (
     <div className="bg-white rounded-lg shadow-lg p-6 space-y-4">
@@ -84,7 +114,7 @@ export const GameControlPanel: React.FC = () => {
       {/* 游戏控制按钮 */}
       <div className="flex space-x-3">
         <button
-          onClick={nextPhase}
+          onClick={handlePhaseChange}
           className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
         >
           <SkipForward className="w-4 h-4" />

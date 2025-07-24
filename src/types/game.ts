@@ -74,6 +74,8 @@ export interface Round {
   nightDeaths?: number[]; // 夜晚死亡的玩家
   discussionNotes?: string;
   actionLog: string[]; // 本回合操作日志
+  isNightResolved?: boolean; // 夜晚是否已结算
+  isDayResolved?: boolean; // 白天是否已结算
 }
 
 export interface Note {

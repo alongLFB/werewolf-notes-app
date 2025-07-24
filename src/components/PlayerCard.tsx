@@ -80,38 +80,31 @@ export const PlayerCard: React.FC<PlayerCardProps> = ({
             />
           </div>
         ) : (
-          <div
-            className="flex items-center space-x-1 cursor-pointer"
-            onClick={(e) => {
-              e.stopPropagation();
-              setIsEditing(true);
-            }}
-          >
-            <span
-              className={`text-sm font-medium ${
-                role && showRoles ? "text-white" : "text-gray-900"
-              }`}
+          <div className="flex flex-col items-center space-y-1">
+            {/* 玩家姓名 */}
+            <div
+              className="flex items-center space-x-1 cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation();
+                setIsEditing(true);
+              }}
             >
-              {player.name || `玩家${player.id}`}
-            </span>
-            <Edit
-              className={`w-3 h-3 ${
-                role && showRoles
-                  ? "text-white text-opacity-70"
-                  : "text-gray-400"
-              }`}
-            />
+              <span className="text-sm font-bold text-gray-900 bg-white bg-opacity-90 px-2 py-1 rounded shadow-sm">
+                {player.name || `玩家${player.id}`}
+              </span>
+              <Edit className="w-3 h-3 text-gray-400" />
+            </div>
+
+            {/* 角色信息 */}
+            {role && showRoles && (
+              <div className="text-xs font-medium text-white bg-black bg-opacity-60 px-2 py-1 rounded">
+                {role.name}
+              </div>
+            )}
           </div>
         )}
 
-        {/* 角色名称 */}
-        {role && showRoles && (
-          <div className="text-xs font-medium text-center">
-            <div className="px-2 py-1 rounded-full bg-black bg-opacity-20 text-white">
-              {role.name}
-            </div>
-          </div>
-        )}
+        {/* 移除单独的角色名称显示，因为已经整合到玩家名称中了 */}
 
         {/* 死亡信息 */}
         {!isAlive && player.deathReason && (
