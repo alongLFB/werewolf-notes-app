@@ -1,6 +1,14 @@
 import React from "react";
 import { useGameStore } from "@/store/gameStore";
-import { SkipForward, Users, Clock, Sun, Moon, Trophy } from "lucide-react";
+import {
+  SkipForward,
+  Users,
+  Clock,
+  Sun,
+  Moon,
+  Trophy,
+  AlertCircle,
+} from "lucide-react";
 
 export const GameControlPanel: React.FC = () => {
   const {
@@ -9,6 +17,7 @@ export const GameControlPanel: React.FC = () => {
     getCampCounts,
     getAlivePlayers,
     getCurrentRound,
+    announceNightDeaths,
   } = useGameStore();
 
   if (!currentGame) return null;
@@ -112,17 +121,31 @@ export const GameControlPanel: React.FC = () => {
       </div>
 
       {/* 游戏控制按钮 */}
-      <div className="flex space-x-3">
+      <div className="space-y-2">
+        {/* 主要阶段转换按钮 */}
         <button
           onClick={handlePhaseChange}
-          className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
+          className="w-full bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
         >
           <SkipForward className="w-4 h-4" />
           <span>{isDay ? "进入夜晚" : "进入白天"}</span>
         </button>
 
+        {/* 死亡公布按钮 */}
+        {isDay && (
+          <button
+            onClick={() => {
+              announceNightDeaths();
+            }}
+            className="w-full bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
+          >
+            <AlertCircle className="w-4 h-4" />
+            <span>公布昨夜死亡</span>
+          </button>
+        )}
+
         {currentGame.status === "finished" && (
-          <div className="flex-1 bg-yellow-100 border border-yellow-300 text-yellow-800 font-medium py-2 px-4 rounded-lg flex items-center justify-center space-x-2">
+          <div className="w-full bg-yellow-100 border border-yellow-300 text-yellow-800 font-medium py-2 px-4 rounded-lg flex items-center justify-center space-x-2">
             <Trophy className="w-4 h-4" />
             <span>游戏结束</span>
           </div>

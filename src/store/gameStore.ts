@@ -57,6 +57,9 @@ interface GameStore {
   // 检查当前回合是否已结算
   isCurrentRoundResolved: () => boolean;
 
+  // 公布夜晚死亡结果
+  announceNightDeaths: () => void;
+
   // 日志系统
   addActionLog: (message: string, isPrivate?: boolean) => void;
   getVisibleLogs: () => string[];
@@ -253,6 +256,19 @@ export const useGameStore = create<GameStore>()(
             currentRound: newRound,
           },
         });
+
+        // 如果进入白天阶段，根据回合数决定是否公布死亡
+        if (newPhase === "day") {
+          if (newRound === 1) {
+            // 第一回合白天，不立即公布死亡（等警长选举后）
+            get().addActionLog("第一个白天开始，请先进行警长选举");
+          } else {
+            // 第二回合及以后，立即公布昨夜死亡情况
+            setTimeout(() => {
+              get().announceNightDeaths();
+            }, 100); // 延迟一点确保状态更新完成
+          }
+        }
       },
 
       addVote: (voterId: number, targetId: number | "abstain") => {
@@ -645,6 +661,16 @@ export const useGameStore = create<GameStore>()(
           currentGame.players.find((p) => p.id === playerId)?.name ||
           `玩家${playerId}`;
         get().addActionLog(`${playerName} 当选警长`);
+
+        // 第一回合警长选举结束，提示可以公布死亡信息
+        if (
+          currentGame.currentRound === 1 &&
+          currentGame.currentPhase === "day"
+        ) {
+          get().addActionLog(
+            "警长选举结束，请点击'公布昨夜死亡'按钮查看第一晚的死亡情况"
+          );
+        }
       },
 
       addNightDeath: (playerId: number, reason: string) => {
@@ -837,7 +863,18 @@ export const useGameStore = create<GameStore>()(
 
         // 执行最终死亡
         finalDeaths.forEach((playerId) => {
-          get().setPlayerAlive(playerId, false, "werewolf_kill");
+          // 确定死亡原因
+          let deathReason: DeathReason = "werewolf_kill";
+
+          // 检查是否是女巫毒杀
+          const isPoisoned = witchPoisons.some(
+            (poison) => poison.targetId === playerId
+          );
+          if (isPoisoned) {
+            deathReason = "witch_poison";
+          }
+
+          get().setPlayerAlive(playerId, false, deathReason);
           const playerName =
             currentGame.players.find((p) => p.id === playerId)?.name ||
             `玩家${playerId}`;
@@ -996,6 +1033,93 @@ export const useGameStore = create<GameStore>()(
           return currentRound.isDayResolved || false;
         } else {
           return currentRound.isNightResolved || false;
+        }
+      },
+
+      announceNightDeaths: () => {
+        const { currentGame } = get();
+        if (!currentGame) return;
+
+        let targetRound: number;
+
+        if (currentGame.currentPhase === "day") {
+          // 如果当前是白天，查看当前回合或前一个回合的夜晚死亡
+          if (currentGame.currentRound === 1) {
+            targetRound = 1; // 第一回合白天，查看第一回合夜晚
+          } else {
+            targetRound = currentGame.currentRound - 1; // 其他回合，查看前一回合夜晚
+          }
+        } else {
+          get().addActionLog("只能在白天公布死亡信息");
+          return;
+        }
+
+        // 检查是否已经公布过这个回合的死亡信息
+        const currentRoundData = get().getCurrentRound();
+        if (
+          currentRoundData?.actionLog.some(
+            (log) => log.includes("昨夜死亡公布") || log.includes("昨夜平安")
+          )
+        ) {
+          get().addActionLog("本回合的死亡信息已经公布过了");
+          return;
+        }
+
+        // 收集在指定回合夜晚死亡的玩家
+        const deadPlayers = currentGame.players.filter(
+          (player) =>
+            !player.isAlive &&
+            player.deathRound === targetRound &&
+            (player.deathReason === "werewolf_kill" ||
+              player.deathReason === "witch_poison")
+        );
+
+        if (deadPlayers.length > 0) {
+          const deadPlayerNames = deadPlayers
+            .map((player) => player.name || `玩家${player.id}`)
+            .join("、");
+
+          get().addActionLog(`昨夜死亡公布：${deadPlayerNames} 死亡`);
+
+          // 添加详细的死亡原因（只在上帝视角显示）
+          deadPlayers.forEach((player) => {
+            const reasonText =
+              player.deathReason === "werewolf_kill"
+                ? "狼人击杀"
+                : player.deathReason === "witch_poison"
+                ? "女巫毒杀"
+                : "未知原因";
+            get().addActionLog(
+              `${player.name || `玩家${player.id}`} 死于 ${reasonText}`,
+              true
+            );
+          });
+
+          // 第一回合特殊提示
+          if (currentGame.currentRound === 1) {
+            get().addActionLog("第一晚死亡公布完毕，现在开始白天讨论和投票");
+          }
+        } else {
+          // 检查是否有夜间行动记录但没有结算
+          const targetRoundData = currentGame.rounds.find(
+            (r) => r.number === targetRound
+          );
+          const hasNightActions =
+            targetRoundData?.nightActions &&
+            targetRoundData.nightActions.length > 0;
+
+          if (hasNightActions && !targetRoundData?.isNightResolved) {
+            get().addActionLog(
+              "检测到第一回合有夜间行动记录，但还没有进行夜晚行动结算。请先进行夜晚行动结算，然后再公布死亡信息。"
+            );
+          } else {
+            get().addActionLog("昨夜平安，无人死亡");
+
+            // 第一回合特殊提示
+            if (currentGame.currentRound === 1) {
+              get().addActionLog("第一晚平安，现在开始白天讨论和投票");
+            }
+          }
         }
       },
     }),
