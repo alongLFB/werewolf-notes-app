@@ -33,6 +33,7 @@ export default function Home() {
     loadGame,
     setPlayerRole,
     finishGame,
+    getSelectedRoleCounts,
   } = useGameStore();
 
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -47,7 +48,7 @@ export default function Home() {
   const handleCreateGame = () => {
     if (gameName.trim()) {
       const config = ROLE_CONFIGS[selectedConfig];
-      createGame(gameName.trim(), config.playerCount);
+      createGame(gameName.trim(), config.playerCount, config.roles);
       setShowCreateForm(false);
       setGameName("");
     }
@@ -124,6 +125,9 @@ export default function Home() {
                         <div className="text-xs text-gray-600 mt-1">
                           {config.playerCount}人局
                         </div>
+                        <div className="text-xs text-gray-700 mt-1">
+                          {config.roles_description}
+                        </div>
                       </button>
                     ))}
                   </div>
@@ -186,7 +190,7 @@ export default function Home() {
               </h1>
               <div className="flex items-center space-x-2 text-sm text-gray-800 font-medium">
                 <Users className="w-4 h-4" />
-                <span>{currentGame.playerCount}人局</span>
+                <span>{currentGame.playerCount}人局-狼</span>
               </div>
               <div className="flex items-center space-x-2 text-sm text-gray-800 font-medium">
                 <span>第{currentGame.currentRound}回合</span>
@@ -338,6 +342,8 @@ export default function Home() {
                       ?.role
                   }
                   onRoleSelect={handleRoleSelect}
+                  roleConfig={currentGame.roleConfig}
+                  selectedRoleCounts={getSelectedRoleCounts()}
                 />
                 <button
                   onClick={() => setSelectedPlayer(null)}

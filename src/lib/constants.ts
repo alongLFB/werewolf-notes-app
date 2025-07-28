@@ -51,68 +51,48 @@ export const ROLES: Record<RoleType, Role> = {
     camp: "villagers",
     color: "bg-yellow-600 text-white",
   },
-  cupid: {
-    type: "cupid",
-    name: "丘比特",
-    description: "第一夜指定两个玩家为情侣",
-    camp: "third_party",
-    color: "bg-pink-600 text-white",
-  },
-  thief: {
-    type: "thief",
-    name: "盗贼",
-    description: "第一夜可以选择身份",
-    camp: "third_party",
-    color: "bg-gray-700 text-white",
-  },
-  mayor: {
-    type: "mayor",
-    name: "村长",
-    description: "投票时算1.5票",
+  knight: {
+    type: "knight",
+    name: "骑士",
+    description: "白天可以与玩家决斗：杀死狼人则狼人出局，杀死好人则自己死亡",
     camp: "villagers",
     color: "bg-indigo-600 text-white",
+  },
+  dark_wolf_king: {
+    type: "dark_wolf_king",
+    name: "黑狼王",
+    description: "被投票出局时可以选择带走一个玩家",
+    camp: "werewolves",
+    color: "bg-gray-800 text-white",
+  },
+  white_wolf_king: {
+    type: "white_wolf_king",
+    name: "白狼王",
+    description: "可以在白天自爆并带走一个玩家",
+    camp: "werewolves",
+    color: "bg-slate-600 text-white",
   },
 };
 
 // 预设游戏配置
 export const ROLE_CONFIGS: RoleConfig[] = [
   {
-    name: "6人局标准",
-    description: "适合新手的6人局",
-    playerCount: 6,
-    roles: {
-      villager: 2,
-      werewolf: 2,
-      seer: 1,
-      witch: 1,
-    },
-  },
-  {
-    name: "8人局标准",
-    description: "经典8人局配置",
-    playerCount: 8,
-    roles: {
-      villager: 3,
-      werewolf: 3,
-      seer: 1,
-      witch: 1,
-    },
-  },
-  {
-    name: "9人局进阶",
-    description: "包含守卫的9人局",
+    name: "9人暗牌场",
+    description: "新手进阶挑战，9人纷争乱斗",
+    roles_description: "3村民，3狼人，1预言家，1女巫，1猎人",
     playerCount: 9,
     roles: {
       villager: 3,
       werewolf: 3,
       seer: 1,
       witch: 1,
-      guard: 1,
+      hunter: 1,
     },
   },
   {
-    name: "10人局标准",
-    description: "经典10人局配置",
+    name: "10人速推场",
+    description: "通往强者的必经之路",
+    roles_description: "4村民，3狼人，1预言家，1女巫，1猎人",
     playerCount: 10,
     roles: {
       villager: 4,
@@ -123,8 +103,9 @@ export const ROLE_CONFIGS: RoleConfig[] = [
     },
   },
   {
-    name: "12人局进阶",
-    description: "完整的12人局配置",
+    name: "12人标准场",
+    description: "强者的晋升之路",
+    roles_description: "4村民，4狼人，1预言家，1女巫，1猎人，1白痴",
     playerCount: 12,
     roles: {
       villager: 4,
@@ -132,7 +113,37 @@ export const ROLE_CONFIGS: RoleConfig[] = [
       seer: 1,
       witch: 1,
       hunter: 1,
+      idiot: 1,
+    },
+  },
+  {
+    name: "12人狼王守卫",
+    description: "狼王，扰乱好人视线的逻辑大神",
+    roles_description: "4村民，3狼人，1黑狼王，1预言家，1女巫，1猎人，1守卫",
+    playerCount: 12,
+    roles: {
+      villager: 4,
+      werewolf: 3,
+      dark_wolf_king: 1,
+      seer: 1,
+      witch: 1,
+      hunter: 1,
       guard: 1,
+    },
+  },
+  {
+    name: "12人白狼王骑士",
+    description: "光与暗的再次对决",
+    roles_description: "4村民，3狼人，1白狼王，1预言家，1女巫，1守卫，1骑士",
+    playerCount: 12,
+    roles: {
+      villager: 4,
+      werewolf: 3,
+      white_wolf_king: 1,
+      seer: 1,
+      witch: 1,
+      guard: 1,
+      knight: 1,
     },
   },
 ];
@@ -161,9 +172,9 @@ export const getRoleIcon = (roleType: RoleType): string => {
     hunter: "🏹",
     guard: "🛡️",
     idiot: "🤡",
-    cupid: "💘",
-    thief: "🕵️",
-    mayor: "👑",
+    knight: "⚔️",
+    dark_wolf_king: "👑",
+    white_wolf_king: "💀",
   };
   return icons[roleType] || "❓";
 };

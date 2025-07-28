@@ -24,8 +24,58 @@ export const NightActionPanel: React.FC = () => {
 
   const alivePlayers = getAlivePlayers();
 
+  // 根据角色获取可执行的行动类型
+  const getAvailableActions = (role: string | undefined) => {
+    if (!role) return [];
+
+    switch (role) {
+      case "werewolf":
+      case "dark_wolf_king":
+      case "white_wolf_king":
+        return [{ value: "werewolf_kill", label: "击杀" }];
+      case "seer":
+        return [{ value: "seer_check", label: "查验身份" }];
+      case "witch":
+        return [
+          { value: "witch_save", label: "使用解药救人" },
+          { value: "witch_poison", label: "使用毒药毒人" },
+        ];
+      case "guard":
+        return [{ value: "guard_protect", label: "守护保护" }];
+      default:
+        return [];
+    }
+  };
+
+  // 获取选中行动者的可用行动
+  const selectedActorPlayer = selectedActor
+    ? alivePlayers.find((p) => p.id === selectedActor)
+    : null;
+  const availableActions = getAvailableActions(selectedActorPlayer?.role);
+
+  // 当选择行动者时，自动重置行动类型
+  const handleActorChange = (actorId: number | null) => {
+    setSelectedActor(actorId);
+    setActionType(""); // 重置行动类型
+    setSelectedTarget(null); // 重置目标
+    setActionResult(""); // 重置结果
+  };
+
   const handleAddAction = () => {
     if (!selectedActor || !actionType) return;
+
+    // 检查是否需要目标玩家
+    const needsTarget = [
+      "werewolf_kill",
+      "seer_check",
+      "witch_save",
+      "witch_poison",
+      "guard_protect",
+    ].includes(actionType);
+    if (needsTarget && !selectedTarget) {
+      alert("该行动需要选择目标玩家");
+      return;
+    }
 
     const action: NightAction = {
       actorId: selectedActor,
@@ -91,7 +141,7 @@ export const NightActionPanel: React.FC = () => {
             <select
               value={selectedActor || ""}
               onChange={(e) =>
-                setSelectedActor(
+                handleActorChange(
                   e.target.value ? parseInt(e.target.value) : null
                 )
               }
@@ -99,7 +149,18 @@ export const NightActionPanel: React.FC = () => {
             >
               <option value="">选择行动者</option>
               {alivePlayers
-                .filter((p) => p.role)
+                .filter(
+                  (p) =>
+                    p.role &&
+                    [
+                      "werewolf",
+                      "dark_wolf_king",
+                      "white_wolf_king",
+                      "seer",
+                      "witch",
+                      "guard",
+                    ].includes(p.role)
+                )
                 .map((player) => {
                   const role = player.role ? ROLES[player.role] : null;
                   return (
@@ -121,14 +182,17 @@ export const NightActionPanel: React.FC = () => {
               onChange={(e) =>
                 setActionType(e.target.value as NightAction["actionType"] | "")
               }
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+              disabled={!selectedActor}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 disabled:bg-gray-100 disabled:text-gray-500"
             >
-              <option value="">选择行动类型</option>
-              <option value="werewolf_kill">狼人击杀</option>
-              <option value="seer_check">预言家查验</option>
-              <option value="witch_save">女巫救人</option>
-              <option value="witch_poison">女巫毒人</option>
-              <option value="guard_protect">守卫保护</option>
+              <option value="">
+                {selectedActor ? "选择行动类型" : "请先选择行动者"}
+              </option>
+              {availableActions.map((action) => (
+                <option key={action.value} value={action.value}>
+                  {action.label}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -137,6 +201,7 @@ export const NightActionPanel: React.FC = () => {
         <div>
           <label className="block text-sm font-medium text-gray-800 mb-2">
             目标玩家
+            {actionType === "witch_save" && " (通常是被狼人击杀的玩家)"}
           </label>
           <select
             value={selectedTarget || ""}
@@ -145,9 +210,12 @@ export const NightActionPanel: React.FC = () => {
                 e.target.value ? parseInt(e.target.value) : null
               )
             }
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
+            disabled={!actionType}
+            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900 disabled:bg-gray-100 disabled:text-gray-500"
           >
-            <option value="">选择目标(可选)</option>
+            <option value="">
+              {actionType ? "选择目标玩家" : "请先选择行动类型"}
+            </option>
             {alivePlayers.map((player) => (
               <option key={player.id} value={player.id}>
                 {player.name || `玩家${player.id}`} ({player.id}号)
@@ -176,7 +244,19 @@ export const NightActionPanel: React.FC = () => {
 
         <button
           onClick={handleAddAction}
-          disabled={!selectedActor || !actionType}
+          disabled={
+            !selectedActor ||
+            !actionType ||
+            ([
+              "werewolf_kill",
+              "seer_check",
+              "witch_save",
+              "witch_poison",
+              "guard_protect",
+            ].includes(actionType) &&
+              !selectedTarget) ||
+            (actionType === "seer_check" && !actionResult)
+          }
           className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:text-gray-200 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
         >
           <Plus className="w-4 h-4" />

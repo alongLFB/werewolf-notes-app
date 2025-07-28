@@ -18,7 +18,11 @@ interface GameStore {
   games: Game[];
 
   // 游戏操作
-  createGame: (name: string, playerCount: number) => void;
+  createGame: (
+    name: string,
+    playerCount: number,
+    roleConfig?: { [key in RoleType]?: number }
+  ) => void;
   loadGame: (gameId: string) => void;
   saveCurrentGame: () => void;
   deleteGame: (gameId: string) => void;
@@ -44,6 +48,8 @@ interface GameStore {
   addPoliceCandidate: (playerId: number) => void;
   removePoliceCandidate: (playerId: number) => void;
   electSheriff: (playerId: number) => void;
+  transferSheriff: (newSheriffId: number) => void;
+  destroySheriffBadge: () => void;
 
   // 夜晚死亡
   addNightDeath: (playerId: number, reason: string) => void;
@@ -63,6 +69,9 @@ interface GameStore {
   // 日志系统
   addActionLog: (message: string, isPrivate?: boolean) => void;
   getVisibleLogs: () => string[];
+
+  // 角色统计
+  getSelectedRoleCounts: () => { [key in RoleType]?: number };
 
   // 用户角色
   setUserRole: (role: "god" | "player") => void;
@@ -88,7 +97,11 @@ export const useGameStore = create<GameStore>()(
       currentGame: null,
       games: [],
 
-      createGame: (name: string, playerCount: number) => {
+      createGame: (
+        name: string,
+        playerCount: number,
+        roleConfig?: { [key in RoleType]?: number }
+      ) => {
         const gameId = Date.now().toString();
         const players: Player[] = Array.from(
           { length: playerCount },
@@ -121,6 +134,7 @@ export const useGameStore = create<GameStore>()(
           currentRound: 1,
           currentPhase: "night", // 从夜晚开始
           userRole: "god", // 默认为上帝视角
+          roleConfig, // 添加角色配置
         };
 
         set((state) => ({
@@ -200,6 +214,9 @@ export const useGameStore = create<GameStore>()(
         const { currentGame } = get();
         if (!currentGame) return;
 
+        // 检查是否是警长死亡
+        const isSheriffDying = !isAlive && currentGame.sheriff === playerId;
+
         const updatedPlayers = currentGame.players.map((p) =>
           p.id === playerId
             ? {
@@ -217,6 +234,16 @@ export const useGameStore = create<GameStore>()(
             players: updatedPlayers,
           },
         });
+
+        // 如果是警长死亡，提示处理警徽
+        if (isSheriffDying) {
+          const playerName =
+            currentGame.players.find((p) => p.id === playerId)?.name ||
+            `玩家${playerId}`;
+          get().addActionLog(
+            `警长 ${playerName} 死亡，请选择撕毁警徽或移交给其他玩家`
+          );
+        }
       },
 
       addPlayerNote: (playerId: number, note: string) => {
@@ -531,15 +558,34 @@ export const useGameStore = create<GameStore>()(
                 "hunter",
                 "guard",
                 "idiot",
-                "mayor",
+                "knight",
               ].includes(role)
             );
           }).length,
-          werewolves: alivePlayers.filter((p) => p.role === "werewolf").length,
+          werewolves: alivePlayers.filter(
+            (p) =>
+              p.role &&
+              ["werewolf", "dark_wolf_king", "white_wolf_king"].includes(p.role)
+          ).length,
           thirdParty: alivePlayers.filter(
             (p) => p.role && ["cupid", "thief"].includes(p.role)
           ).length,
         };
+      },
+
+      getSelectedRoleCounts: () => {
+        const { currentGame } = get();
+        if (!currentGame) return {};
+
+        const roleCounts: { [key in RoleType]?: number } = {};
+
+        currentGame.players.forEach((player) => {
+          if (player.role) {
+            roleCounts[player.role] = (roleCounts[player.role] || 0) + 1;
+          }
+        });
+
+        return roleCounts;
       },
 
       getCurrentRound: () => {
@@ -671,6 +717,48 @@ export const useGameStore = create<GameStore>()(
             "警长选举结束，请点击'公布昨夜死亡'按钮查看第一晚的死亡情况"
           );
         }
+      },
+
+      transferSheriff: (newSheriffId: number) => {
+        const { currentGame } = get();
+        if (!currentGame) return;
+
+        const oldSheriffName = currentGame.sheriff
+          ? currentGame.players.find((p) => p.id === currentGame.sheriff)
+              ?.name || `玩家${currentGame.sheriff}`
+          : "未知";
+        const newSheriffName =
+          currentGame.players.find((p) => p.id === newSheriffId)?.name ||
+          `玩家${newSheriffId}`;
+
+        set({
+          currentGame: {
+            ...currentGame,
+            sheriff: newSheriffId,
+          },
+        });
+
+        get().addActionLog(`${oldSheriffName} 将警徽移交给 ${newSheriffName}`);
+      },
+
+      destroySheriffBadge: () => {
+        const { currentGame } = get();
+        if (!currentGame) return;
+
+        const sheriffName = currentGame.sheriff
+          ? currentGame.players.find((p) => p.id === currentGame.sheriff)
+              ?.name || `玩家${currentGame.sheriff}`
+          : "警长";
+
+        set({
+          currentGame: {
+            ...currentGame,
+            sheriff: undefined,
+            sheriffBadgeDestroyed: true,
+          },
+        });
+
+        get().addActionLog(`${sheriffName} 撕毁警徽，警长职位作废`);
       },
 
       addNightDeath: (playerId: number, reason: string) => {
@@ -921,16 +1009,19 @@ export const useGameStore = create<GameStore>()(
           return;
         }
 
-        // 统计投票结果
+        // 统计投票结果（考虑警长1.5票权重）
         const voteCount: { [key: number]: number } = {};
         const abstainCount = { abstain: 0 };
 
         currentRound.votes.forEach((vote) => {
+          // 检查投票者是否是警长
+          const voteWeight = vote.voterId === currentGame.sheriff ? 1.5 : 1;
+
           if (vote.targetId === "abstain") {
-            abstainCount.abstain += 1;
+            abstainCount.abstain += voteWeight;
           } else {
             voteCount[vote.targetId as number] =
-              (voteCount[vote.targetId as number] || 0) + 1;
+              (voteCount[vote.targetId as number] || 0) + voteWeight;
           }
         });
 
@@ -946,10 +1037,17 @@ export const useGameStore = create<GameStore>()(
           const playerName =
             currentGame.players.find((p) => p.id === parseInt(playerId))
               ?.name || `玩家${playerId}`;
-          resultLog += ` ${playerName}(${count}票)`;
+          // 显示票数，如果有小数则保留一位小数
+          const displayVotes =
+            count % 1 === 0 ? count.toString() : count.toFixed(1);
+          resultLog += ` ${playerName}(${displayVotes}票)`;
         });
         if (abstainCount.abstain > 0) {
-          resultLog += ` 弃票(${abstainCount.abstain}票)`;
+          const displayAbstain =
+            abstainCount.abstain % 1 === 0
+              ? abstainCount.abstain.toString()
+              : abstainCount.abstain.toFixed(1);
+          resultLog += ` 弃票(${displayAbstain}票)`;
         }
         get().addActionLog(resultLog);
 

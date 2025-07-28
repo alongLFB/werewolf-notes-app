@@ -7,9 +7,9 @@ export type RoleType =
   | "hunter" // 猎人
   | "guard" // 守卫
   | "idiot" // 白痴
-  | "cupid" // 丘比特
-  | "thief" // 盗贼
-  | "mayor"; // 村长
+  | "knight" // 骑士
+  | "dark_wolf_king" // 黑狼王
+  | "white_wolf_king"; // 白狼王
 
 export type CampType = "villagers" | "werewolves" | "third_party";
 export type GamePhase = "day" | "night";
@@ -18,7 +18,10 @@ export type DeathReason =
   | "vote"
   | "werewolf_kill"
   | "witch_poison"
-  | "hunter_revenge";
+  | "hunter_revenge"
+  | "knight_duel"
+  | "dark_wolf_king_revenge"
+  | "white_wolf_king_explosion";
 
 export interface Role {
   type: RoleType;
@@ -101,13 +104,16 @@ export interface Game {
   currentRound: number;
   currentPhase: GamePhase;
   sheriff?: number; // 当前警长
+  sheriffBadgeDestroyed?: boolean; // 警徽是否被撕毁
   userRole: "god" | "player"; // 用户角色，决定日志查看权限
+  roleConfig?: { [key in RoleType]?: number }; // 角色配置数量限制
 }
 
 // 预设角色配置
 export interface RoleConfig {
   name: string;
   description: string;
+  roles_description?: string;
   roles: { [key in RoleType]?: number };
   playerCount: number;
 }
