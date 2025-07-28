@@ -31,7 +31,9 @@ export const GameControlPanel: React.FC = () => {
     if (isDay) {
       // 白天转夜晚
       const hasVotes = currentRound?.votes && currentRound.votes.length > 0;
-      if (hasVotes) {
+      const isDayResolved = currentRound?.isDayResolved || false;
+      
+      if (hasVotes && !isDayResolved) {
         const confirm = window.confirm(
           "当前有投票记录，建议先进行白天投票结算。确定要直接进入夜晚吗？"
         );
@@ -41,7 +43,9 @@ export const GameControlPanel: React.FC = () => {
       // 夜晚转白天
       const hasNightActions =
         currentRound?.nightActions && currentRound.nightActions.length > 0;
-      if (hasNightActions) {
+      const isNightResolved = currentRound?.isNightResolved || false;
+      
+      if (hasNightActions && !isNightResolved) {
         const confirm = window.confirm(
           "当前有夜间行动记录，建议先进行夜晚行动结算。确定要直接进入白天吗？"
         );

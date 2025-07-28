@@ -1099,15 +1099,33 @@ export const useGameStore = create<GameStore>()(
 
         // 第一步：处理女巫毒杀（最高优先级，无法阻挡）
         witchPoisons.forEach((poison) => {
-          if (poison.targetId && !finalDeaths.includes(poison.targetId)) {
-            finalDeaths.push(poison.targetId);
-            get().addActionLog(
-              `女巫毒死了 ${
-                currentGame.players.find((p) => p.id === poison.targetId)
-                  ?.name || `玩家${poison.targetId}`
-              }`,
-              true
-            );
+          if (poison.targetId) {
+            // 检查目标玩家是否存在且存活
+            const targetPlayer = currentGame.players.find((p) => p.id === poison.targetId);
+            if (!targetPlayer) {
+              get().addActionLog(`女巫毒杀目标玩家${poison.targetId}不存在`, true);
+              return;
+            }
+            if (!targetPlayer.isAlive) {
+              get().addActionLog(`女巫毒杀目标${targetPlayer.name || `玩家${poison.targetId}`}已经死亡`, true);
+              return;
+            }
+            
+            // 避免重复毒杀同一目标
+            if (!finalDeaths.includes(poison.targetId)) {
+              finalDeaths.push(poison.targetId);
+              get().addActionLog(
+                `女巫毒死了 ${targetPlayer.name || `玩家${poison.targetId}`}`,
+                true
+              );
+            } else {
+              get().addActionLog(
+                `女巫重复毒杀 ${targetPlayer.name || `玩家${poison.targetId}`}（已在死亡名单中）`,
+                true
+              );
+            }
+          } else {
+            get().addActionLog("女巫毒药使用异常：未指定目标", true);
           }
         });
 
@@ -1200,10 +1218,14 @@ export const useGameStore = create<GameStore>()(
           get().addActionLog("昨夜是平安夜，没有人死亡");
         }
 
-        // 标记夜晚已结算
+        // 标记夜晚已结算并同步死亡信息到 nightDeaths
         const updatedRounds = currentGame.rounds.map((r) =>
           r.number === currentGame.currentRound
-            ? { ...r, isNightResolved: true }
+            ? { 
+                ...r, 
+                isNightResolved: true,
+                nightDeaths: finalDeaths // 同步死亡信息
+              }
             : r
         );
 
@@ -1379,15 +1401,15 @@ export const useGameStore = create<GameStore>()(
         }
 
         // 检查是否已经公布过这个回合的死亡信息
-        const currentRoundData = get().getCurrentRound();
-        if (
-          currentRoundData?.actionLog.some(
-            (log) => log.includes("昨夜死亡公布") || log.includes("昨夜平安")
-          )
-        ) {
-          get().addActionLog("本回合的死亡信息已经公布过了");
-          return;
-        }
+        // const currentRoundData = get().getCurrentRound();
+        // if (
+        //   currentRoundData?.actionLog.some(
+        //     (log) => log.includes("昨夜死亡公布") || log.includes("昨夜平安")
+        //   )
+        // ) {
+        //   get().addActionLog("本回合的死亡信息已经公布过了");
+        //   return;
+        // }
 
         // 收集在指定回合夜晚死亡的玩家
         const deadPlayers = currentGame.players.filter(
@@ -1397,6 +1419,21 @@ export const useGameStore = create<GameStore>()(
             (player.deathReason === "werewolf_kill" ||
               player.deathReason === "witch_poison")
         );
+
+        // 调试信息 - 临时添加，帮助排查问题
+        console.log("DEBUG - announceNightDeaths:", {
+          currentRound: currentGame.currentRound,
+          currentPhase: currentGame.currentPhase,
+          targetRound,
+          allDeadPlayers: currentGame.players.filter(p => !p.isAlive),
+          filteredDeadPlayers: deadPlayers,
+          deadPlayersInfo: deadPlayers.map(p => ({
+            id: p.id,
+            name: p.name,
+            deathRound: p.deathRound,
+            deathReason: p.deathReason
+          }))
+        });
 
         if (deadPlayers.length > 0) {
           const deadPlayerNames = deadPlayers
@@ -1551,20 +1588,35 @@ export const useGameStore = create<GameStore>()(
           .filter(([, count]) => count === maxVotes)
           .map(([candidateId]) => parseInt(candidateId));
 
-        // 生成投票结果日志
-        let resultLog = `第${votingRound}轮警长投票结果：`;
-        Object.entries(voteCount).forEach(([candidateId, count]) => {
-          const candidateName =
-            currentGame.players.find((p) => p.id === parseInt(candidateId))
-              ?.name || `玩家${candidateId}`;
-          resultLog += ` ${candidateName}(${count}票)`;
+        // 生成详细的投票记录日志
+        let voteDetailsLog = `第${votingRound}轮警长投票详情：`;
+        Object.entries(votes).forEach(([voterId, candidateId]) => {
+          const voterName = currentGame.players.find(p => p.id === parseInt(voterId))?.name || `玩家${voterId}`;
+          const candidateName = currentGame.players.find(p => p.id === candidateId)?.name || `玩家${candidateId}`;
+          voteDetailsLog += ` ${voterName}→${candidateName};`;
         });
+        get().addActionLog(voteDetailsLog);
+
+        // 生成投票结果汇总日志
+        let resultLog = `第${votingRound}轮警长投票结果：`;
+        const sortedResults = Object.entries(voteCount)
+          .sort(([,a], [,b]) => b - a) // 按票数降序排列
+          .map(([candidateId, count]) => {
+            const candidateName =
+              currentGame.players.find((p) => p.id === parseInt(candidateId))
+                ?.name || `玩家${candidateId}`;
+            return `${candidateName}(${count}票)`;
+          });
+        resultLog += ` ${sortedResults.join(', ')}`;
         get().addActionLog(resultLog);
 
         if (winners.length === 1) {
-          // 有明确胜者
+          // 有明确胜者，直接当选
           const winnerId = winners[0];
+          const winnerName = currentGame.players.find(p => p.id === winnerId)?.name || `玩家${winnerId}`;
+          
           get().electSheriff(winnerId);
+          get().addActionLog(`🎉 ${winnerName} 以${maxVotes}票当选警长！`);
 
           const updatedPoliceElection = {
             ...policeElection,
@@ -1587,6 +1639,14 @@ export const useGameStore = create<GameStore>()(
           });
         } else if (winners.length > 1) {
           // 平票情况
+          const tiedCandidateNames = winners
+            .map(
+              (id) =>
+                currentGame.players.find((p) => p.id === id)?.name ||
+                `玩家${id}`
+            )
+            .join("、");
+
           if (votingRound >= 2) {
             // 第二轮还是平票，警徽流失
             const updatedPoliceElection = {
@@ -1609,24 +1669,10 @@ export const useGameStore = create<GameStore>()(
               },
             });
 
-            const tiedCandidateNames = winners
-              .map(
-                (id) =>
-                  currentGame.players.find((p) => p.id === id)?.name ||
-                  `玩家${id}`
-              )
-              .join("、");
-            get().addActionLog(`${tiedCandidateNames} 再次平票，警徽流失`);
+            get().addActionLog(`💥 ${tiedCandidateNames} 再次平票（各${maxVotes}票），警徽流失！`);
           } else {
             // 第一轮平票，进入第二轮投票
-            const tiedCandidateNames = winners
-              .map(
-                (id) =>
-                  currentGame.players.find((p) => p.id === id)?.name ||
-                  `玩家${id}`
-              )
-              .join("、");
-            get().addActionLog(`${tiedCandidateNames} 平票，将进行第二轮投票`);
+            get().addActionLog(`⚖️ ${tiedCandidateNames} 平票（各${maxVotes}票），将进行第二轮投票！`);
 
             // 重置投票状态，进入第二轮
             get().resetSheriffVoting();

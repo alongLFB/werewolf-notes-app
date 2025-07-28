@@ -25,7 +25,7 @@ export const SheriffElectionPanel: React.FC = () => {
   } = useGameStore();
 
   const [selectedPlayers, setSelectedPlayers] = useState<number[]>([]);
-  const [selectedVote, setSelectedVote] = useState<number | null>(null);
+  const [voterSelections, setVoterSelections] = useState<{[voterId: number]: number | null}>({});
 
   if (!currentGame || currentGame.currentPhase !== "day") return null;
 
@@ -69,11 +69,18 @@ export const SheriffElectionPanel: React.FC = () => {
 
   const handleVoteForSheriff = (voterId: number, candidateId: number) => {
     addSheriffVote(voterId, candidateId);
-    setSelectedVote(null);
+    // 清除该投票者的选择状态
+    setVoterSelections(prev => {
+      const newSelections = { ...prev };
+      delete newSelections[voterId];
+      return newSelections;
+    });
   };
 
   const handleProcessVoteResults = () => {
     processSheriffVoteResults();
+    // 清空所有投票选择状态
+    setVoterSelections({});
   };
 
   const handleWerewolfExplosion = (playerId: number) => {
@@ -286,19 +293,29 @@ export const SheriffElectionPanel: React.FC = () => {
               警长竞选投票 - 第{policeElection.votingRound}轮
             </h4>
             {isAllVoted() && (
-              <button
-                onClick={handleProcessVoteResults}
-                className="bg-green-600 hover:bg-green-700 text-white text-sm px-3 py-1 rounded transition-colors duration-200 flex items-center space-x-1"
-              >
-                <CheckCircle className="w-3 h-3" />
-                <span>统计结果</span>
-              </button>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm text-green-600 font-medium bg-green-100 px-2 py-1 rounded">
+                  ✅ 全员已投票
+                </span>
+                <button
+                  onClick={handleProcessVoteResults}
+                  className="bg-green-600 hover:bg-green-700 text-white text-sm px-4 py-2 rounded transition-colors duration-200 flex items-center space-x-1 font-medium"
+                >
+                  <CheckCircle className="w-4 h-4" />
+                  <span>统计结果</span>
+                </button>
+              </div>
             )}
           </div>
 
           {/* 可投票玩家列表 */}
           <div className="space-y-3">
-            <p className="text-sm text-blue-800">请各位非上警玩家投票：</p>
+            <div className="flex items-center justify-between">
+              <p className="text-sm text-blue-800">请各位非上警玩家投票：</p>
+              <p className="text-xs text-blue-600 bg-blue-100 px-2 py-1 rounded">
+                📊 全员投票完成后将自动统计结果
+              </p>
+            </div>
             {getEligibleVoters().map((voter) => {
               const hasVoted = policeElection.votes.hasOwnProperty(voter.id);
               const votedFor = hasVoted ? policeElection.votes[voter.id] : null;
@@ -306,6 +323,7 @@ export const SheriffElectionPanel: React.FC = () => {
                 ? currentGame.players.find((p) => p.id === votedFor)?.name ||
                   `玩家${votedFor}`
                 : null;
+              const currentSelection = voterSelections[voter.id] || null;
 
               return (
                 <div key={voter.id} className="bg-white rounded-lg p-3 border">
@@ -315,7 +333,7 @@ export const SheriffElectionPanel: React.FC = () => {
                         {voter.name || `玩家${voter.id}`} ({voter.id}号)
                       </span>
                       {hasVoted && (
-                        <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded">
+                        <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded font-medium">
                           已投: {votedForName}
                         </span>
                       )}
@@ -324,19 +342,22 @@ export const SheriffElectionPanel: React.FC = () => {
                     {!hasVoted && (
                       <div className="flex items-center space-x-2">
                         <select
-                          value={selectedVote || ""}
+                          value={currentSelection || ""}
                           onChange={(e) =>
-                            setSelectedVote(parseInt(e.target.value))
+                            setVoterSelections(prev => ({
+                              ...prev,
+                              [voter.id]: e.target.value ? parseInt(e.target.value) : null
+                            }))
                           }
-                          className="text-sm border border-gray-300 rounded px-2 py-1"
+                          className="text-sm border border-gray-300 rounded px-2 py-1 text-gray-900 font-medium"
                         >
-                          <option value="">选择候选人</option>
+                          <option value="" className="text-gray-500">选择候选人</option>
                           {getValidCandidates().map((candidateId) => {
                             const candidate = currentGame.players.find(
                               (p) => p.id === candidateId
                             );
                             return (
-                              <option key={candidateId} value={candidateId}>
+                              <option key={candidateId} value={candidateId} className="text-gray-900 font-medium">
                                 {candidate?.name || `玩家${candidateId}`} (
                                 {candidateId}号)
                               </option>
@@ -345,10 +366,10 @@ export const SheriffElectionPanel: React.FC = () => {
                         </select>
                         <button
                           onClick={() =>
-                            selectedVote &&
-                            handleVoteForSheriff(voter.id, selectedVote)
+                            currentSelection &&
+                            handleVoteForSheriff(voter.id, currentSelection)
                           }
-                          disabled={!selectedVote}
+                          disabled={!currentSelection}
                           className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white text-sm px-3 py-1 rounded transition-colors duration-200"
                         >
                           投票
@@ -390,24 +411,39 @@ export const SheriffElectionPanel: React.FC = () => {
               <h5 className="text-sm font-medium text-gray-800 mb-2">
                 当前票数统计：
               </h5>
-              <div className="space-y-1">
-                {getValidCandidates().map((candidateId) => {
-                  const candidate = currentGame.players.find(
-                    (p) => p.id === candidateId
-                  );
-                  const voteCount = Object.values(policeElection.votes).filter(
-                    (v) => v === candidateId
-                  ).length;
-                  return (
-                    <div
-                      key={candidateId}
-                      className="flex items-center justify-between text-sm"
-                    >
-                      <span>{candidate?.name || `玩家${candidateId}`}</span>
-                      <span className="font-medium">{voteCount}票</span>
+              <div className="space-y-2">
+                {getValidCandidates()
+                  .map((candidateId) => {
+                    const candidate = currentGame.players.find(
+                      (p) => p.id === candidateId
+                    );
+                    const voteCount = Object.values(policeElection.votes).filter(
+                      (v) => v === candidateId
+                    ).length;
+                    const totalVotes = getEligibleVoters().length;
+                    const percentage = totalVotes > 0 ? (voteCount / totalVotes) * 100 : 0;
+                    return { candidateId, candidate, voteCount, percentage };
+                  })
+                  .sort((a, b) => b.voteCount - a.voteCount) // 按票数降序排列
+                  .map(({ candidateId, candidate, voteCount, percentage }) => (
+                    <div key={candidateId} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-medium text-gray-900">
+                          {candidate?.name || `玩家${candidateId}`}
+                        </span>
+                        <span className="font-bold text-blue-600">
+                          {voteCount}票 ({percentage.toFixed(1)}%)
+                        </span>
+                      </div>
+                      {/* 票数进度条 */}
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                          style={{ width: `${percentage}%` }}
+                        ></div>
+                      </div>
                     </div>
-                  );
-                })}
+                  ))}
               </div>
             </div>
           )}
