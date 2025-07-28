@@ -1642,8 +1642,8 @@ export const useGameStore = create<GameStore>()(
             return;
           }
 
-          // 检查候选人是否有效
-          if (!policeElection.candidates.includes(candidateId)) {
+          // 检查候选人是否有效（弃票除外）
+          if (candidateId !== -1 && !policeElection.candidates.includes(candidateId)) {
             get().addActionLog(`玩家${candidateId} 不是有效候选人`);
             return;
           }
@@ -1666,10 +1666,15 @@ export const useGameStore = create<GameStore>()(
           const voterName =
             currentGame.players.find((p) => p.id === voterId)?.name ||
             `玩家${voterId}`;
-          const candidateName =
-            currentGame.players.find((p) => p.id === candidateId)?.name ||
-            `玩家${candidateId}`;
-          get().addActionLog(`${voterName} 投票给 ${candidateName}`);
+          
+          if (candidateId === -1) {
+            get().addActionLog(`${voterName} 选择弃票`);
+          } else {
+            const candidateName =
+              currentGame.players.find((p) => p.id === candidateId)?.name ||
+              `玩家${candidateId}`;
+            get().addActionLog(`${voterName} 投票给 ${candidateName}`);
+          }
         }
       },
 
@@ -1711,8 +1716,10 @@ export const useGameStore = create<GameStore>()(
         const { votes, candidates, withdrawnCandidates, votingRound } =
           policeElection;
 
-        // 统计有效候选人的得票
+        // 统计有效候选人的得票和弃票
         const voteCount: { [candidateId: number]: number } = {};
+        let abstainCount = 0;
+        
         candidates.forEach((candidateId) => {
           if (!withdrawnCandidates.includes(candidateId)) {
             voteCount[candidateId] = 0;
@@ -1720,7 +1727,9 @@ export const useGameStore = create<GameStore>()(
         });
 
         Object.values(votes).forEach((candidateId) => {
-          if (voteCount.hasOwnProperty(candidateId)) {
+          if (candidateId === -1) {
+            abstainCount++; // 统计弃票
+          } else if (voteCount.hasOwnProperty(candidateId)) {
             voteCount[candidateId]++;
           }
         });
@@ -1737,10 +1746,15 @@ export const useGameStore = create<GameStore>()(
           const voterName =
             currentGame.players.find((p) => p.id === parseInt(voterId))?.name ||
             `玩家${voterId}`;
-          const candidateName =
-            currentGame.players.find((p) => p.id === candidateId)?.name ||
-            `玩家${candidateId}`;
-          voteDetailsLog += ` ${voterName}→${candidateName};`;
+          
+          if (candidateId === -1) {
+            voteDetailsLog += ` ${voterName}→弃票;`;
+          } else {
+            const candidateName =
+              currentGame.players.find((p) => p.id === candidateId)?.name ||
+              `玩家${candidateId}`;
+            voteDetailsLog += ` ${voterName}→${candidateName};`;
+          }
         });
         get().addActionLog(voteDetailsLog);
 
@@ -1754,6 +1768,12 @@ export const useGameStore = create<GameStore>()(
                 ?.name || `玩家${candidateId}`;
             return `${candidateName}(${count}票)`;
           });
+        
+        // 添加弃票统计
+        if (abstainCount > 0) {
+          sortedResults.push(`弃票(${abstainCount}票)`);
+        }
+        
         resultLog += ` ${sortedResults.join(", ")}`;
         get().addActionLog(resultLog);
 

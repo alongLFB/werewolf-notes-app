@@ -90,7 +90,7 @@ export const VotingPanel: React.FC = () => {
                   e.target.value ? parseInt(e.target.value) : null
                 )
               }
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
             >
               <option value="">选择投票者</option>
               {alivePlayers.map((player) => (

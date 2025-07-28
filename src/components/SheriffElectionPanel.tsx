@@ -25,7 +25,7 @@ export const SheriffElectionPanel: React.FC = () => {
   } = useGameStore();
 
   const [selectedPlayers, setSelectedPlayers] = useState<number[]>([]);
-  const [voterSelections, setVoterSelections] = useState<{[voterId: number]: number | null}>({});
+  const [voterSelections, setVoterSelections] = useState<{[voterId: number]: number | "abstain" | null}>({});
 
   if (!currentGame || currentGame.currentPhase !== "day") return null;
 
@@ -320,8 +320,10 @@ export const SheriffElectionPanel: React.FC = () => {
               const hasVoted = policeElection.votes.hasOwnProperty(voter.id);
               const votedFor = hasVoted ? policeElection.votes[voter.id] : null;
               const votedForName = votedFor
-                ? currentGame.players.find((p) => p.id === votedFor)?.name ||
-                  `玩家${votedFor}`
+                ? votedFor === -1 
+                  ? "弃票"
+                  : currentGame.players.find((p) => p.id === votedFor)?.name ||
+                    `玩家${votedFor}`
                 : null;
               const currentSelection = voterSelections[voter.id] || null;
 
@@ -346,12 +348,13 @@ export const SheriffElectionPanel: React.FC = () => {
                           onChange={(e) =>
                             setVoterSelections(prev => ({
                               ...prev,
-                              [voter.id]: e.target.value ? parseInt(e.target.value) : null
+                              [voter.id]: e.target.value ? (e.target.value === "abstain" ? "abstain" : parseInt(e.target.value)) : null
                             }))
                           }
                           className="text-sm border border-gray-300 rounded px-2 py-1 text-gray-900 font-medium"
                         >
-                          <option value="" className="text-gray-500">选择候选人</option>
+                          <option value="" className="text-gray-500">选择候选人或弃票</option>
+                          <option value="abstain" className="text-orange-600 font-medium">弃票</option>
                           {getValidCandidates().map((candidateId) => {
                             const candidate = currentGame.players.find(
                               (p) => p.id === candidateId
@@ -365,10 +368,16 @@ export const SheriffElectionPanel: React.FC = () => {
                           })}
                         </select>
                         <button
-                          onClick={() =>
-                            currentSelection &&
-                            handleVoteForSheriff(voter.id, currentSelection)
-                          }
+                          onClick={() => {
+                            if (currentSelection) {
+                              if (currentSelection === "abstain") {
+                                // 处理弃票 - 可以调用一个专门的弃票方法或者传递特殊值
+                                addSheriffVote(voter.id, -1); // 使用-1表示弃票
+                              } else {
+                                handleVoteForSheriff(voter.id, currentSelection);
+                              }
+                            }
+                          }}
                           disabled={!currentSelection}
                           className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white text-sm px-3 py-1 rounded transition-colors duration-200"
                         >
@@ -444,6 +453,38 @@ export const SheriffElectionPanel: React.FC = () => {
                       </div>
                     </div>
                   ))}
+                
+                {/* 弃票统计 */}
+                {(() => {
+                  const abstainCount = Object.values(policeElection.votes).filter(
+                    (v) => v === -1
+                  ).length;
+                  const totalVotes = getEligibleVoters().length;
+                  const abstainPercentage = totalVotes > 0 ? (abstainCount / totalVotes) * 100 : 0;
+                  
+                  if (abstainCount > 0) {
+                    return (
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-sm">
+                          <span className="font-medium text-orange-600">
+                            弃票
+                          </span>
+                          <span className="font-bold text-orange-600">
+                            {abstainCount}票 ({abstainPercentage.toFixed(1)}%)
+                          </span>
+                        </div>
+                        {/* 弃票进度条 */}
+                        <div className="w-full bg-gray-200 rounded-full h-2">
+                          <div
+                            className="bg-orange-500 h-2 rounded-full transition-all duration-300"
+                            style={{ width: `${abstainPercentage}%` }}
+                          ></div>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
             </div>
           )}

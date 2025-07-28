@@ -59,7 +59,7 @@ export const GameControlPanel: React.FC = () => {
     <div className="bg-white rounded-lg shadow-lg p-6 space-y-4">
       {/* 游戏基本信息 */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">{currentGame.name}</h2>
+        <h2 className="text-xl font-bold text-gray-800">{currentGame.name}</h2>
         <div className="flex items-center space-x-2 text-sm text-gray-600">
           <Users className="w-4 h-4" />
           <span>{currentGame.playerCount}人局</span>
@@ -70,7 +70,7 @@ export const GameControlPanel: React.FC = () => {
       <div className="flex items-center space-x-4">
         <div className="flex items-center space-x-2">
           <Clock className="w-5 h-5 text-blue-500" />
-          <span className="font-medium">
+          <span className="font-medium text-gray-800">
             第 {currentGame.currentRound} 回合
           </span>
         </div>
