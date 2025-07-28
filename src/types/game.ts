@@ -21,7 +21,8 @@ export type DeathReason =
   | "hunter_revenge"
   | "knight_duel"
   | "dark_wolf_king_revenge"
-  | "white_wolf_king_explosion";
+  | "white_wolf_king_explosion"
+  | "werewolf_explosion"; // 狼人自爆
 
 export interface Role {
   type: RoleType;
@@ -65,6 +66,11 @@ export interface PoliceElection {
   candidates: number[]; // 上警的玩家ID
   sheriff?: number; // 当选警长的玩家ID
   votes: { [voterId: number]: number }; // 投票结果
+  withdrawnCandidates: number[]; // 退警的玩家ID
+  votingRound: number; // 当前投票轮次（1为第一轮，2为平票后的第二轮）
+  isVotingPhase: boolean; // 是否在投票阶段
+  isCompleted: boolean; // 是否已完成
+  badgeLost: boolean; // 警徽是否流失
 }
 
 export interface Round {
@@ -107,6 +113,9 @@ export interface Game {
   sheriffBadgeDestroyed?: boolean; // 警徽是否被撕毁
   userRole: "god" | "player"; // 用户角色，决定日志查看权限
   roleConfig?: { [key in RoleType]?: number }; // 角色配置数量限制
+  werewolfExplosions: number[]; // 狼人自爆的回合数组
+  sheriffElectionCompleted?: boolean; // 警长竞选是否已完成
+  firstNightResultsAnnounced?: boolean; // 第一晚结果是否已公布
 }
 
 // 预设角色配置

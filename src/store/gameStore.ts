@@ -43,6 +43,7 @@ interface GameStore {
   addVote: (voterId: number, targetId: number | "abstain") => void;
   addNightAction: (action: NightAction) => void;
   eliminatePlayer: (playerId: number) => void;
+  explodeWerewolf: (playerId: number) => void; // 狼人自爆
 
   // 警长相关
   addPoliceCandidate: (playerId: number) => void;
@@ -50,6 +51,14 @@ interface GameStore {
   electSheriff: (playerId: number) => void;
   transferSheriff: (newSheriffId: number) => void;
   destroySheriffBadge: () => void;
+  completeSheriffElection: () => void;
+  announceFirstNightResults: () => void;
+
+  // 警长竞选投票
+  addSheriffVote: (voterId: number, candidateId: number) => void;
+  startSheriffVoting: () => void;
+  processSheriffVoteResults: () => void;
+  resetSheriffVoting: () => void;
 
   // 夜晚死亡
   addNightDeath: (playerId: number, reason: string) => void;
@@ -72,6 +81,12 @@ interface GameStore {
 
   // 角色统计
   getSelectedRoleCounts: () => { [key in RoleType]?: number };
+
+  // 游戏规则判断
+  shouldShowSheriffElection: () => boolean;
+  shouldShowVoting: () => boolean;
+  shouldShowNightResults: () => boolean;
+  isBadgeLost: () => boolean;
 
   // 用户角色
   setUserRole: (role: "god" | "player") => void;
@@ -128,6 +143,15 @@ export const useGameStore = create<GameStore>()(
               votes: [],
               nightActions: [],
               actionLog: [`游戏开始！${playerCount}人局狼人杀开始`], // 添加初始日志
+              policeElection: {
+                candidates: [],
+                votes: {},
+                withdrawnCandidates: [],
+                votingRound: 1,
+                isVotingPhase: false,
+                isCompleted: false,
+                badgeLost: false,
+              },
             },
           ],
           notes: [],
@@ -135,6 +159,9 @@ export const useGameStore = create<GameStore>()(
           currentPhase: "night", // 从夜晚开始
           userRole: "god", // 默认为上帝视角
           roleConfig, // 添加角色配置
+          werewolfExplosions: [], // 初始化狼人自爆记录
+          sheriffElectionCompleted: false, // 初始化警长竞选状态
+          firstNightResultsAnnounced: false, // 初始化第一晚结果公布状态
         };
 
         set((state) => ({
@@ -268,12 +295,35 @@ export const useGameStore = create<GameStore>()(
 
         let newPhase: GamePhase;
         let newRound = currentGame.currentRound;
+        let updatedRounds = currentGame.rounds;
 
-        if (currentGame.currentPhase === "day") {
-          newPhase = "night";
-        } else {
+        if (currentGame.currentPhase === "night") {
+          // 夜晚 → 白天，保持同一回合
           newPhase = "day";
+        } else {
+          // 白天 → 夜晚，进入下一回合
+          newPhase = "night";
           newRound += 1;
+
+          // 创建新回合的数据结构
+          const newRoundData = {
+            number: newRound,
+            phase: newPhase,
+            votes: [],
+            nightActions: [],
+            actionLog: [],
+            policeElection: {
+              candidates: [],
+              votes: {},
+              withdrawnCandidates: [],
+              votingRound: 1,
+              isVotingPhase: false,
+              isCompleted: false,
+              badgeLost: false,
+            },
+          };
+
+          updatedRounds = [...currentGame.rounds, newRoundData];
         }
 
         set({
@@ -281,6 +331,7 @@ export const useGameStore = create<GameStore>()(
             ...currentGame,
             currentPhase: newPhase,
             currentRound: newRound,
+            rounds: updatedRounds,
           },
         });
 
@@ -476,6 +527,35 @@ export const useGameStore = create<GameStore>()(
         get().addActionLog(`${playerName} 被投票出局`);
       },
 
+      explodeWerewolf: (playerId: number) => {
+        const { currentGame } = get();
+        if (!currentGame) return;
+
+        // 记录狼人自爆的回合
+        const updatedGame = {
+          ...currentGame,
+          werewolfExplosions: [
+            ...currentGame.werewolfExplosions,
+            currentGame.currentRound,
+          ],
+        };
+
+        set({ currentGame: updatedGame });
+
+        // 设置玩家死亡
+        get().setPlayerAlive(playerId, false, "werewolf_explosion");
+
+        // 添加自爆日志
+        const playerName =
+          currentGame.players.find((p) => p.id === playerId)?.name ||
+          `玩家${playerId}`;
+        get().addActionLog(`${playerName} 狼人自爆！`);
+
+        // 狼人自爆后直接进入下一回合的夜晚
+        get().nextPhase(); // 先结束当前白天阶段
+        get().nextPhase(); // 再进入下一回合的夜晚
+      },
+
       addGameNote: (
         content: string,
         playerId?: number,
@@ -588,6 +668,104 @@ export const useGameStore = create<GameStore>()(
         return roleCounts;
       },
 
+      shouldShowSheriffElection: () => {
+        const { currentGame } = get();
+        if (!currentGame) return false;
+
+        // 只有白天才可能显示警长竞选
+        if (currentGame.currentPhase !== "day") {
+          return false;
+        }
+
+        // 如果已经有警长了，不再显示竞选
+        if (currentGame.sheriff) {
+          return false;
+        }
+
+        // 检查狼人自爆情况
+        const explosionCount = currentGame.werewolfExplosions.length;
+
+        // 9人局：第一个回合白天有狼人自爆，第二个回合白天警徽流失
+        if (currentGame.playerCount === 9 || currentGame.playerCount === 10) {
+          if (currentGame.currentRound === 1) {
+            return true; // 第一回合总是可以竞选
+          } else if (currentGame.currentRound === 2 && explosionCount >= 1) {
+            return false; // 第一回合有自爆，第二回合警徽流失
+          }
+        }
+
+        // 12人局：需要连续两个回合白天都有狼人自爆，第三个回合白天警徽流失
+        if (currentGame.playerCount === 12) {
+          if (currentGame.currentRound === 1) {
+            return true; // 第一回合总是可以竞选
+          } else if (currentGame.currentRound === 2) {
+            return true; // 第二回合也可以竞选
+          } else if (currentGame.currentRound === 3 && explosionCount >= 2) {
+            return false; // 前两回合都有自爆，第三回合警徽流失
+          }
+        }
+
+        // 其他情况下，只有第一回合可以竞选警长
+        return currentGame.currentRound === 1;
+      },
+
+      shouldShowVoting: () => {
+        const { currentGame } = get();
+        if (!currentGame) return false;
+
+        // 只有白天才有投票
+        if (currentGame.currentPhase !== "day") return false;
+
+        // 第一回合需要先完成警长竞选和公布夜晚结果
+        if (currentGame.currentRound === 1) {
+          return (
+            currentGame.sheriffElectionCompleted === true &&
+            currentGame.firstNightResultsAnnounced === true
+          );
+        }
+
+        // 其他回合直接显示投票，除非是警徽流失状态
+        return !get().isBadgeLost();
+      },
+
+      shouldShowNightResults: () => {
+        const { currentGame } = get();
+        if (!currentGame) return false;
+
+        // 只有白天才公布夜晚结果
+        if (currentGame.currentPhase !== "day") return false;
+
+        // 第一回合需要先完成警长竞选
+        if (currentGame.currentRound === 1) {
+          return (
+            currentGame.sheriffElectionCompleted === true &&
+            currentGame.firstNightResultsAnnounced !== true
+          );
+        }
+
+        // 警徽流失状态需要公布多晚的死亡信息
+        return get().isBadgeLost();
+      },
+
+      isBadgeLost: () => {
+        const { currentGame } = get();
+        if (!currentGame) return false;
+
+        const explosionCount = currentGame.werewolfExplosions.length;
+
+        // 9人局：第一回合有自爆，第二回合警徽流失
+        if (currentGame.playerCount === 9 || currentGame.playerCount === 10) {
+          return currentGame.currentRound === 2 && explosionCount >= 1;
+        }
+
+        // 12人局：前两回合都有自爆，第三回合警徽流失
+        if (currentGame.playerCount === 12) {
+          return currentGame.currentRound === 3 && explosionCount >= 2;
+        }
+
+        return false;
+      },
+
       getCurrentRound: () => {
         const { currentGame } = get();
         if (!currentGame) return null;
@@ -633,6 +811,11 @@ export const useGameStore = create<GameStore>()(
           const policeElection = currentRound.policeElection || {
             candidates: [],
             votes: {},
+            withdrawnCandidates: [],
+            votingRound: 1,
+            isVotingPhase: false,
+            isCompleted: false,
+            badgeLost: false,
           };
           if (!policeElection.candidates.includes(playerId)) {
             policeElection.candidates.push(playerId);
@@ -656,6 +839,8 @@ export const useGameStore = create<GameStore>()(
               `玩家${playerId}`;
             get().addActionLog(`${playerName} 上警竞选警长`);
           }
+        } else {
+          console.warn("无法获取当前回合，添加警长候选人失败");
         }
       },
 
@@ -670,7 +855,20 @@ export const useGameStore = create<GameStore>()(
             candidates: currentRound.policeElection.candidates.filter(
               (id) => id !== playerId
             ),
+            withdrawnCandidates: [
+              ...currentRound.policeElection.withdrawnCandidates,
+              playerId,
+            ],
           };
+
+          // 如果在投票阶段退警，清除对该候选人的投票
+          if (policeElection.isVotingPhase) {
+            Object.keys(policeElection.votes).forEach((voterId) => {
+              if (policeElection.votes[parseInt(voterId)] === playerId) {
+                delete policeElection.votes[parseInt(voterId)];
+              }
+            });
+          }
 
           const updatedRounds = currentGame.rounds.map((r) =>
             r.number === currentGame.currentRound ? { ...r, policeElection } : r
@@ -759,6 +957,34 @@ export const useGameStore = create<GameStore>()(
         });
 
         get().addActionLog(`${sheriffName} 撕毁警徽，警长职位作废`);
+      },
+
+      completeSheriffElection: () => {
+        const { currentGame } = get();
+        if (!currentGame) return;
+
+        set({
+          currentGame: {
+            ...currentGame,
+            sheriffElectionCompleted: true,
+          },
+        });
+
+        get().addActionLog("警长竞选已完成");
+      },
+
+      announceFirstNightResults: () => {
+        const { currentGame } = get();
+        if (!currentGame) return;
+
+        set({
+          currentGame: {
+            ...currentGame,
+            firstNightResultsAnnounced: true,
+          },
+        });
+
+        get().addActionLog("第一晚结果已公布");
       },
 
       addNightDeath: (playerId: number, reason: string) => {
@@ -1218,6 +1444,221 @@ export const useGameStore = create<GameStore>()(
               get().addActionLog("第一晚平安，现在开始白天讨论和投票");
             }
           }
+        }
+      },
+
+      // 警长竞选投票相关方法
+      addSheriffVote: (voterId: number, candidateId: number) => {
+        const { currentGame } = get();
+        if (!currentGame) return;
+
+        const currentRound = get().getCurrentRound();
+        if (currentRound?.policeElection) {
+          const policeElection = { ...currentRound.policeElection };
+
+          // 检查投票者是否已退警
+          if (policeElection.withdrawnCandidates.includes(voterId)) {
+            get().addActionLog(`玩家${voterId} 已退警，无法投票`);
+            return;
+          }
+
+          // 检查候选人是否有效
+          if (!policeElection.candidates.includes(candidateId)) {
+            get().addActionLog(`玩家${candidateId} 不是有效候选人`);
+            return;
+          }
+
+          // 添加或更新投票
+          policeElection.votes[voterId] = candidateId;
+
+          const updatedRounds = currentGame.rounds.map((r) =>
+            r.number === currentGame.currentRound ? { ...r, policeElection } : r
+          );
+
+          set({
+            currentGame: {
+              ...currentGame,
+              rounds: updatedRounds,
+            },
+          });
+
+          // 添加投票日志
+          const voterName =
+            currentGame.players.find((p) => p.id === voterId)?.name ||
+            `玩家${voterId}`;
+          const candidateName =
+            currentGame.players.find((p) => p.id === candidateId)?.name ||
+            `玩家${candidateId}`;
+          get().addActionLog(`${voterName} 投票给 ${candidateName}`);
+        }
+      },
+
+      startSheriffVoting: () => {
+        const { currentGame } = get();
+        if (!currentGame) return;
+
+        const currentRound = get().getCurrentRound();
+        if (currentRound?.policeElection) {
+          const policeElection = {
+            ...currentRound.policeElection,
+            isVotingPhase: true,
+            votes: {}, // 清空之前的投票
+          };
+
+          const updatedRounds = currentGame.rounds.map((r) =>
+            r.number === currentGame.currentRound ? { ...r, policeElection } : r
+          );
+
+          set({
+            currentGame: {
+              ...currentGame,
+              rounds: updatedRounds,
+            },
+          });
+
+          get().addActionLog("警长竞选投票开始，请非上警玩家投票");
+        }
+      },
+
+      processSheriffVoteResults: () => {
+        const { currentGame } = get();
+        if (!currentGame) return;
+
+        const currentRound = get().getCurrentRound();
+        if (!currentRound?.policeElection) return;
+
+        const policeElection = currentRound.policeElection;
+        const { votes, candidates, withdrawnCandidates, votingRound } =
+          policeElection;
+
+        // 统计有效候选人的得票
+        const voteCount: { [candidateId: number]: number } = {};
+        candidates.forEach((candidateId) => {
+          if (!withdrawnCandidates.includes(candidateId)) {
+            voteCount[candidateId] = 0;
+          }
+        });
+
+        Object.values(votes).forEach((candidateId) => {
+          if (voteCount.hasOwnProperty(candidateId)) {
+            voteCount[candidateId]++;
+          }
+        });
+
+        // 找出得票最多的候选人
+        const maxVotes = Math.max(...Object.values(voteCount));
+        const winners = Object.entries(voteCount)
+          .filter(([, count]) => count === maxVotes)
+          .map(([candidateId]) => parseInt(candidateId));
+
+        // 生成投票结果日志
+        let resultLog = `第${votingRound}轮警长投票结果：`;
+        Object.entries(voteCount).forEach(([candidateId, count]) => {
+          const candidateName =
+            currentGame.players.find((p) => p.id === parseInt(candidateId))
+              ?.name || `玩家${candidateId}`;
+          resultLog += ` ${candidateName}(${count}票)`;
+        });
+        get().addActionLog(resultLog);
+
+        if (winners.length === 1) {
+          // 有明确胜者
+          const winnerId = winners[0];
+          get().electSheriff(winnerId);
+
+          const updatedPoliceElection = {
+            ...policeElection,
+            sheriff: winnerId,
+            isCompleted: true,
+            isVotingPhase: false,
+          };
+
+          const updatedRounds = currentGame.rounds.map((r) =>
+            r.number === currentGame.currentRound
+              ? { ...r, policeElection: updatedPoliceElection }
+              : r
+          );
+
+          set({
+            currentGame: {
+              ...currentGame,
+              rounds: updatedRounds,
+            },
+          });
+        } else if (winners.length > 1) {
+          // 平票情况
+          if (votingRound >= 2) {
+            // 第二轮还是平票，警徽流失
+            const updatedPoliceElection = {
+              ...policeElection,
+              badgeLost: true,
+              isCompleted: true,
+              isVotingPhase: false,
+            };
+
+            const updatedRounds = currentGame.rounds.map((r) =>
+              r.number === currentGame.currentRound
+                ? { ...r, policeElection: updatedPoliceElection }
+                : r
+            );
+
+            set({
+              currentGame: {
+                ...currentGame,
+                rounds: updatedRounds,
+              },
+            });
+
+            const tiedCandidateNames = winners
+              .map(
+                (id) =>
+                  currentGame.players.find((p) => p.id === id)?.name ||
+                  `玩家${id}`
+              )
+              .join("、");
+            get().addActionLog(`${tiedCandidateNames} 再次平票，警徽流失`);
+          } else {
+            // 第一轮平票，进入第二轮投票
+            const tiedCandidateNames = winners
+              .map(
+                (id) =>
+                  currentGame.players.find((p) => p.id === id)?.name ||
+                  `玩家${id}`
+              )
+              .join("、");
+            get().addActionLog(`${tiedCandidateNames} 平票，将进行第二轮投票`);
+
+            // 重置投票状态，进入第二轮
+            get().resetSheriffVoting();
+          }
+        }
+      },
+
+      resetSheriffVoting: () => {
+        const { currentGame } = get();
+        if (!currentGame) return;
+
+        const currentRound = get().getCurrentRound();
+        if (currentRound?.policeElection) {
+          const policeElection = {
+            ...currentRound.policeElection,
+            votes: {},
+            votingRound: currentRound.policeElection.votingRound + 1,
+            isVotingPhase: true,
+          };
+
+          const updatedRounds = currentGame.rounds.map((r) =>
+            r.number === currentGame.currentRound ? { ...r, policeElection } : r
+          );
+
+          set({
+            currentGame: {
+              ...currentGame,
+              rounds: updatedRounds,
+            },
+          });
+
+          get().addActionLog(`第${policeElection.votingRound}轮警长投票开始`);
         }
       },
     }),

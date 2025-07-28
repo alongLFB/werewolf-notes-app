@@ -1,0 +1,62 @@
+{
+  "Debug Log with Context": {
+    "prefix": "debuglog",
+    "body": [
+      "console.log('🐛 Debug [${1:function_name}]:', {",
+      "  currentGame: currentGame?.id,",
+      "  currentRound: currentGame?.currentRound,",
+      "  currentPhase: currentGame?.currentPhase,",
+      "  ${2:variable}: ${2:variable}",
+      "});"
+    ],
+    "description": "Insert debug log with werewolf game context"
+  },
+  "Debug Breakpoint Marker": {
+    "prefix": "debughere",
+    "body": [
+      "// 🔴 DEBUG BREAKPOINT: ${1:description}",
+      "debugger; // Set breakpoint here"
+    ],
+    "description": "Insert debug breakpoint marker"
+  },
+  "Zustand Debug Hook": {
+    "prefix": "debugstore",
+    "body": [
+      "// 🐛 Debug store state",
+      "useEffect(() => {",
+      "  console.log('Store state changed:', {",
+      "    currentGame: currentGame?.id,",
+      "    ${1:stateVariable}: ${1:stateVariable}",
+      "  });",
+      "}, [${1:stateVariable}]);"
+    ],
+    "description": "Debug Zustand store state changes"
+  },
+  "Function Entry Debug": {
+    "prefix": "debugentry",
+    "body": [
+      "console.log('🚀 Entering ${1:functionName}:', {",
+      "  args: { ${2:arguments} },",
+      "  timestamp: new Date().toISOString()",
+      "});"
+    ],
+    "description": "Debug function entry with arguments"
+  },
+  "Game State Validator": {
+    "prefix": "debugvalidate",
+    "body": [
+      "// 🔍 Validate game state",
+      "if (!currentGame) {",
+      "  console.warn('⚠️ No current game found');",
+      "  return;",
+      "}",
+      "",
+      "const currentRound = getCurrentRound();",
+      "if (!currentRound) {",
+      "  console.warn('⚠️ No current round found for round:', currentGame.currentRound);",
+      "  return;",
+      "}"
+    ],
+    "description": "Validate werewolf game state with warnings"
+  }
+}

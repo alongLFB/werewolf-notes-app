@@ -11,6 +11,7 @@ export const VotingPanel: React.FC = () => {
     getCurrentRound,
     resolveDayVoting,
     isCurrentRoundResolved,
+    explodeWerewolf,
   } = useGameStore();
 
   const [selectedVoter, setSelectedVoter] = useState<number | null>(null);
@@ -154,6 +155,59 @@ export const VotingPanel: React.FC = () => {
             {isCurrentRoundResolved() ? "白天已结算" : "结算白天投票"}
           </span>
         </button>
+      </div>
+
+      {/* 狼人自爆 */}
+      <div className="border-t pt-6">
+        <h3 className="text-lg font-bold text-gray-900 mb-4">狼人自爆</h3>
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-800 mb-2">
+              选择自爆的狼人
+            </label>
+            <select
+              onChange={(e) => {
+                const playerId = parseInt(e.target.value);
+                if (
+                  playerId &&
+                  confirm(
+                    `确定让 ${
+                      alivePlayers.find((p) => p.id === playerId)?.name ||
+                      `玩家${playerId}`
+                    } 自爆吗？自爆后将影响警长竞选规则。`
+                  )
+                ) {
+                  explodeWerewolf(playerId);
+                }
+                e.target.value = ""; // 重置选择
+              }}
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
+            >
+              <option value="">选择要自爆的狼人...</option>
+              {alivePlayers
+                .filter(
+                  (p) =>
+                    p.role === "werewolf" ||
+                    p.role === "dark_wolf_king" ||
+                    p.role === "white_wolf_king"
+                )
+                .map((player) => (
+                  <option key={player.id} value={player.id}>
+                    {player.name || `玩家${player.id}`} (
+                    {player.role === "werewolf"
+                      ? "狼人"
+                      : player.role === "dark_wolf_king"
+                      ? "黑狼王"
+                      : "白狼王"}
+                    )
+                  </option>
+                ))}
+            </select>
+          </div>
+          <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">
+            ⚠️ 狼人自爆会影响后续的警长竞选规则，请谨慎操作
+          </div>
+        </div>
       </div>
 
       {/* 当前投票状态 */}

@@ -9,6 +9,7 @@ import { VotingPanel } from "@/components/VotingPanel";
 import { NightActionPanel } from "@/components/NightActionPanel";
 import { SheriffElectionPanel } from "@/components/SheriffElectionPanel";
 import { GameLogPanel } from "@/components/GameLogPanel";
+import { NightResultsPanel } from "@/components/NightResultsPanel";
 import { RoleType } from "@/types/game";
 import { ROLE_CONFIGS } from "@/lib/constants";
 import {
@@ -34,6 +35,10 @@ export default function Home() {
     setPlayerRole,
     finishGame,
     getSelectedRoleCounts,
+    shouldShowSheriffElection,
+    shouldShowVoting,
+    shouldShowNightResults,
+    isBadgeLost,
   } = useGameStore();
 
   const [showCreateForm, setShowCreateForm] = useState(false);
@@ -41,9 +46,32 @@ export default function Home() {
   const [showRoles, setShowRoles] = useState(true);
   const [gameName, setGameName] = useState("");
   const [selectedConfig, setSelectedConfig] = useState(0);
-  const [activeTab, setActiveTab] = useState<
-    "day" | "night" | "sheriff" | "log"
-  >("day");
+  const [showGameLog, setShowGameLog] = useState(false);
+
+  // 根据游戏状态自动设置活动标签页
+  const getActiveTab = (): "day" | "night" | "sheriff" | "log" | "results" => {
+    if (!currentGame) return "day";
+
+    // 如果用户要查看日志，直接返回log
+    if (showGameLog) return "log";
+
+    if (currentGame.currentPhase === "night") {
+      return "night";
+    } else if (currentGame.currentPhase === "day") {
+      // 白天阶段的优先级：警长竞选 > 夜晚结果公布 > 投票
+      if (shouldShowSheriffElection()) {
+        return "sheriff";
+      } else if (shouldShowNightResults()) {
+        return "results";
+      } else if (shouldShowVoting()) {
+        return "day";
+      }
+    }
+
+    return "day";
+  };
+
+  const activeTab = getActiveTab();
 
   const handleCreateGame = () => {
     if (gameName.trim()) {
@@ -250,59 +278,74 @@ export default function Home() {
               </div>
             </div>
 
-            {/* 游戏阶段标签 */}
+            {/* 游戏阶段面板 */}
             <div className="bg-white rounded-lg shadow-lg p-6">
-              <div className="flex space-x-1 mb-6">
-                <button
-                  onClick={() => setActiveTab("day")}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
-                    activeTab === "day"
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                  }`}
-                >
-                  <Sun className="w-4 h-4" />
-                  <span>白天投票</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab("night")}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
-                    activeTab === "night"
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                  }`}
-                >
-                  <Moon className="w-4 h-4" />
-                  <span>夜间行动</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab("sheriff")}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
-                    activeTab === "sheriff"
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                  }`}
-                >
-                  <Shield className="w-4 h-4" />
-                  <span>警长竞选</span>
-                </button>
-                <button
-                  onClick={() => setActiveTab("log")}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-medium transition-colors duration-200 ${
-                    activeTab === "log"
-                      ? "bg-blue-600 text-white"
-                      : "bg-gray-200 text-gray-700 hover:bg-gray-300"
-                  }`}
-                >
-                  <FileText className="w-4 h-4" />
-                  <span>游戏日志</span>
-                </button>
+              {/* 当前阶段标题和控制 */}
+              <div className="flex items-center justify-between mb-6">
+                <div>
+                  {activeTab === "day" && !showGameLog && (
+                    <div className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium">
+                      <Sun className="w-4 h-4" />
+                      <span>白天投票</span>
+                    </div>
+                  )}
+                  {activeTab === "night" && !showGameLog && (
+                    <div className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium">
+                      <Moon className="w-4 h-4" />
+                      <span>夜间行动</span>
+                    </div>
+                  )}
+                  {activeTab === "sheriff" && !showGameLog && (
+                    <div className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium">
+                      <Shield className="w-4 h-4" />
+                      <span>警长竞选</span>
+                    </div>
+                  )}
+                  {activeTab === "results" && !showGameLog && (
+                    <div className="flex items-center space-x-2 px-4 py-2 bg-purple-600 text-white rounded-lg font-medium">
+                      <Sun className="w-4 h-4" />
+                      <span>
+                        {isBadgeLost()
+                          ? "警徽流失 - 公布死亡信息"
+                          : "公布夜晚结果"}
+                      </span>
+                    </div>
+                  )}
+                  {(activeTab === "log" || showGameLog) && (
+                    <div className="flex items-center space-x-2 px-4 py-2 bg-blue-600 text-white rounded-lg font-medium">
+                      <FileText className="w-4 h-4" />
+                      <span>游戏日志</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* 右侧按钮 */}
+                <div className="flex items-center space-x-2">
+                  {!showGameLog ? (
+                    <button
+                      onClick={() => setShowGameLog(true)}
+                      className="flex items-center space-x-2 px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors duration-200"
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span>查看日志</span>
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => setShowGameLog(false)}
+                      className="flex items-center space-x-2 px-3 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition-colors duration-200"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      <span>返回游戏</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* 标签内容 */}
               {activeTab === "day" && <VotingPanel />}
               {activeTab === "night" && <NightActionPanel />}
               {activeTab === "sheriff" && <SheriffElectionPanel />}
+              {activeTab === "results" && <NightResultsPanel />}
               {activeTab === "log" && <GameLogPanel />}
             </div>
           </div>
