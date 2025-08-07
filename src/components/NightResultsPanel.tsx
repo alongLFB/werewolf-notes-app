@@ -13,36 +13,60 @@ export const NightResultsPanel: React.FC = () => {
   if (!currentGame || currentGame.currentPhase !== "day") return null;
 
   const isPoliceDestroyed = isBadgeLost();
+  const isFirstRound = currentGame.currentRound === 1;
+  
+  // 检查是否应该显示面板
+  const shouldShowPanel = () => {
+    if (isPoliceDestroyed) {
+      // 狼人自爆情况：总是显示
+      return true;
+    }
+    
+    if (isFirstRound) {
+      // 第一回合：警长竞选完成后显示
+      const currentRound = getCurrentRound();
+      const policeElection = currentRound?.policeElection;
+      return policeElection?.isCompleted || currentGame.sheriff || policeElection?.badgeLost;
+    }
+    
+    // 其他回合：直接显示前一晚死亡信息
+    return true;
+  };
+
+  if (!shouldShowPanel()) return null;
 
   const handleAnnounceResults = () => {
     announceFirstNightResults();
   };
 
-  const getCurrentNightDeaths = () => {
-    const currentRound = getCurrentRound();
-    return currentRound?.nightDeaths || [];
-  };
-
-  const getAllNightDeaths = () => {
-    // 警徽流失状态需要公布所有夜晚的死亡信息
-    const allDeaths: { round: number; deaths: number[] }[] = [];
-
-    for (let i = 1; i <= currentGame.currentRound; i++) {
-      const round = currentGame.rounds.find((r) => r.number === i);
-      if (round && round.nightDeaths && round.nightDeaths.length > 0) {
-        allDeaths.push({
-          round: i,
-          deaths: round.nightDeaths,
-        });
-      }
+  const getNightDeathsToShow = () => {
+    if (isPoliceDestroyed) {
+      // 狼人自爆：显示当前回合的夜晚死亡信息
+      const currentRound = getCurrentRound();
+      return [{ 
+        round: currentGame.currentRound, 
+        deaths: currentRound?.nightDeaths || [] 
+      }];
     }
-
-    return allDeaths;
+    
+    if (isFirstRound) {
+      // 第一回合：显示第一晚的死亡信息
+      const firstRound = currentGame.rounds.find(r => r.number === 1);
+      return [{ 
+        round: 1, 
+        deaths: firstRound?.nightDeaths || [] 
+      }];
+    }
+    
+    // 其他回合：显示前一晚的死亡信息
+    const previousRound = currentGame.rounds.find(r => r.number === currentGame.currentRound - 1);
+    return [{ 
+      round: currentGame.currentRound - 1, 
+      deaths: previousRound?.nightDeaths || [] 
+    }];
   };
 
-  const nightDeaths = isPoliceDestroyed
-    ? getAllNightDeaths()
-    : [{ round: currentGame.currentRound, deaths: getCurrentNightDeaths() }];
+  const nightDeaths = getNightDeathsToShow();
 
   return (
     <div className="space-y-6">
@@ -51,26 +75,35 @@ export const NightResultsPanel: React.FC = () => {
         className={`p-4 rounded-lg ${
           isPoliceDestroyed
             ? "bg-red-50 border border-red-200"
-            : "bg-blue-50 border border-blue-200"
+            : isFirstRound
+            ? "bg-blue-50 border border-blue-200"
+            : "bg-gray-50 border border-gray-200"
         }`}
       >
         <div className="flex items-center space-x-2 mb-2">
           {isPoliceDestroyed ? (
             <>
               <Skull className="w-5 h-5 text-red-600" />
-              <span className="font-medium text-red-800">警徽流失状态</span>
+              <span className="font-medium text-red-800">狼人自爆 - 警徽流失</span>
             </>
-          ) : (
+          ) : isFirstRound ? (
             <>
               <Sun className="w-5 h-5 text-blue-600" />
               <span className="font-medium text-blue-800">第一晚结果公布</span>
+            </>
+          ) : (
+            <>
+              <Skull className="w-5 h-5 text-gray-600" />
+              <span className="font-medium text-gray-800">前一晚死亡信息</span>
             </>
           )}
         </div>
         <p className="text-sm text-gray-700">
           {isPoliceDestroyed
-            ? `由于狼人自爆，警徽流失。现在公布前${currentGame.currentRound}晚的所有死亡信息。`
-            : "警长竞选完成后，现在公布第一晚的死亡结果。"}
+            ? `狼人自爆导致警徽流失，现在公布第${currentGame.currentRound}晚的死亡信息。`
+            : isFirstRound
+            ? "警长竞选完成后，现在公布第一晚的死亡结果。"
+            : `现在公布第${currentGame.currentRound - 1}晚的死亡信息。`}
         </p>
       </div>
 
@@ -135,7 +168,7 @@ export const NightResultsPanel: React.FC = () => {
       </div>
 
       {/* 操作按钮 */}
-      {!isPoliceDestroyed && currentGame.currentRound === 1 && (
+      {!isPoliceDestroyed && isFirstRound && (
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <button
             onClick={handleAnnounceResults}
@@ -150,7 +183,7 @@ export const NightResultsPanel: React.FC = () => {
         </div>
       )}
 
-      {/* 警徽流失状态的说明 */}
+      {/* 狼人自爆的说明 */}
       {isPoliceDestroyed && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
           <div className="flex items-center space-x-2 mb-2">
@@ -158,7 +191,20 @@ export const NightResultsPanel: React.FC = () => {
             <span className="font-medium text-yellow-800">游戏流程调整</span>
           </div>
           <p className="text-sm text-yellow-700">
-            由于警徽流失，跳过警长选择发言顺序环节，直接进入自由发言和投票环节。
+            由于狼人自爆，警徽流失，跳过发言环节，直接进入下一回合夜晚。
+          </p>
+        </div>
+      )}
+
+      {/* 其他回合的说明 */}
+      {!isPoliceDestroyed && !isFirstRound && (
+        <div className="bg-gray-50 border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center space-x-2 mb-2">
+            <Sun className="w-5 h-5 text-gray-600" />
+            <span className="font-medium text-gray-800">正常流程</span>
+          </div>
+          <p className="text-sm text-gray-700">
+            死亡信息已公布，现在可以开始自由发言和投票环节。
           </p>
         </div>
       )}

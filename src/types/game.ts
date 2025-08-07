@@ -41,6 +41,9 @@ export interface Player {
   deathRound?: number;
   notes: string;
   tags: string[];
+  // 女巫药品状态
+  hasAntidote?: boolean; // 是否还有解药
+  hasPoison?: boolean; // 是否还有毒药
 }
 
 export interface Vote {

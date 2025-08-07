@@ -98,6 +98,9 @@ interface GameStore {
 
   // 工具函数
   getAlivePlayers: () => Player[];
+  
+  // 女巫药品状态检查
+  getWitchPotionStatus: (playerId: number) => { hasAntidote: boolean; hasPoison: boolean } | null;
   getCampCounts: () => {
     villagers: number;
     werewolves: number;
@@ -205,7 +208,15 @@ export const useGameStore = create<GameStore>()(
         if (!currentGame) return;
 
         const updatedPlayers = currentGame.players.map((p) =>
-          p.id === playerId ? { ...p, role } : p
+          p.id === playerId 
+            ? { 
+                ...p, 
+                role,
+                // 如果是女巫角色，初始化药品状态
+                hasAntidote: role === "witch" ? true : p.hasAntidote,
+                hasPoison: role === "witch" ? true : p.hasPoison,
+              } 
+            : p
         );
 
         set({
@@ -301,11 +312,11 @@ export const useGameStore = create<GameStore>()(
           // 夜晚 → 白天，保持同一回合
           newPhase = "day";
         } else {
-          // 白天 → 夜晚，进入下一回合
+          // 白天 → 夜晚，进入下一回合（按你的定义：夜晚+白天=1回合）
           newPhase = "night";
           newRound += 1;
 
-          // 创建新回合的数据结构
+          // 创建新回合
           const newRoundData = {
             number: newRound,
             phase: newPhase,
@@ -322,7 +333,6 @@ export const useGameStore = create<GameStore>()(
               badgeLost: false,
             },
           };
-
           updatedRounds = [...currentGame.rounds, newRoundData];
         }
 
@@ -335,17 +345,9 @@ export const useGameStore = create<GameStore>()(
           },
         });
 
-        // 如果进入白天阶段，根据回合数决定是否公布死亡
-        if (newPhase === "day") {
-          if (newRound === 1) {
-            // 第一回合白天，不立即公布死亡（等警长选举后）
-            get().addActionLog("第一个白天开始，请先进行警长选举");
-          } else {
-            // 第二回合及以后，立即公布昨夜死亡情况
-            setTimeout(() => {
-              get().announceNightDeaths();
-            }, 100); // 延迟一点确保状态更新完成
-          }
+        // 第一回合白天需要等待警长竞选完成后才公布夜晚信息
+        if (newPhase === "day" && newRound === 1) {
+          get().addActionLog("第一回合白天开始，请先进行警长竞选");
         }
       },
 
@@ -551,6 +553,11 @@ export const useGameStore = create<GameStore>()(
           `玩家${playerId}`;
         get().addActionLog(`${playerName} 狼人自爆！`);
 
+        // 如果是警长自爆，设置警徽流失
+        if (currentGame.sheriff === playerId) {
+          get().destroySheriffBadge();
+        }
+
         // 狼人自爆后直接进入下一回合的夜晚
         get().nextPhase(); // 先结束当前白天阶段
         get().nextPhase(); // 再进入下一回合的夜晚
@@ -616,6 +623,19 @@ export const useGameStore = create<GameStore>()(
       getAlivePlayers: () => {
         const { currentGame } = get();
         return currentGame?.players.filter((p) => p.isAlive) || [];
+      },
+
+      getWitchPotionStatus: (playerId: number) => {
+        const { currentGame } = get();
+        if (!currentGame) return null;
+        
+        const player = currentGame.players.find((p) => p.id === playerId);
+        if (!player || player.role !== "witch") return null;
+        
+        return {
+          hasAntidote: player.hasAntidote ?? true, // 默认有解药
+          hasPoison: player.hasPoison ?? true,    // 默认有毒药
+        };
       },
 
       getCampCounts: () => {
@@ -735,15 +755,16 @@ export const useGameStore = create<GameStore>()(
         // 只有白天才公布夜晚结果
         if (currentGame.currentPhase !== "day") return false;
 
-        // 第一回合需要先完成警长竞选
+        // 第一回合：必须警长竞选完成 或者 有狼人自爆才能公布
         if (currentGame.currentRound === 1) {
+          const hasWerewolfExplosion = currentGame.werewolfExplosions.includes(1);
           return (
-            currentGame.sheriffElectionCompleted === true &&
+            (currentGame.sheriffElectionCompleted === true || hasWerewolfExplosion) &&
             currentGame.firstNightResultsAnnounced !== true
           );
         }
 
-        // 警徽流失状态需要公布多晚的死亡信息
+        // 其他回合或警徽流失状态
         return get().isBadgeLost();
       },
 
@@ -906,13 +927,13 @@ export const useGameStore = create<GameStore>()(
           `玩家${playerId}`;
         get().addActionLog(`${playerName} 当选警长`);
 
-        // 第一回合警长选举结束，提示可以公布死亡信息
+        // 第一回合警长选举结束，提示等待警上发言
         if (
           currentGame.currentRound === 1 &&
           currentGame.currentPhase === "day"
         ) {
           get().addActionLog(
-            "警长选举结束，请点击'公布昨夜死亡'按钮查看第一晚的死亡情况"
+            "警长选举结束，请进行警上发言，发言结束后点击'公布第一晚死讯'按钮"
           );
         }
       },
@@ -971,6 +992,14 @@ export const useGameStore = create<GameStore>()(
         });
 
         get().addActionLog("警长竞选已完成");
+
+        // 第一回合白天，警长竞选结束后自动公布死讯
+        if (currentGame.currentRound === 1 && currentGame.currentPhase === "day") {
+          // 自动公布第一晚的死亡结果
+          setTimeout(() => {
+            get().announceFirstNightResults();
+          }, 500); // 稍微延迟以确保UI更新
+        }
       },
 
       announceFirstNightResults: () => {
@@ -1337,6 +1366,35 @@ export const useGameStore = create<GameStore>()(
           });
         }
 
+        // 更新女巫药品状态
+        let updatedPlayersWithPotions = get().currentGame!.players;
+        
+        // 处理女巫使用解药
+        witchSaves.forEach((save) => {
+          updatedPlayersWithPotions = updatedPlayersWithPotions.map((p) =>
+            p.id === save.actorId
+              ? { ...p, hasAntidote: false } // 使用解药后，解药消失
+              : p
+          );
+        });
+
+        // 处理女巫使用毒药
+        witchPoisons.forEach((poison) => {
+          updatedPlayersWithPotions = updatedPlayersWithPotions.map((p) =>
+            p.id === poison.actorId
+              ? { ...p, hasPoison: false } // 使用毒药后，毒药消失
+              : p
+          );
+        });
+
+        // 更新游戏状态中的玩家信息
+        set({
+          currentGame: {
+            ...get().currentGame!,
+            players: updatedPlayersWithPotions,
+          },
+        });
+
         // 强制保存游戏状态
         get().saveCurrentGame();
 
@@ -1558,7 +1616,7 @@ export const useGameStore = create<GameStore>()(
         const currentRoundData = get().getCurrentRound();
         const alreadyAnnounced = currentRoundData?.actionLog.some(
           (log) => 
-            (log.includes("昨夜死亡公布") || log.includes("昨夜平安")) &&
+            (log.includes("死亡公布") || log.includes("平安夜")) &&
             (currentGame.currentRound === 1 || log.includes(`第${targetRound}回合`))
         );
         
@@ -1567,12 +1625,11 @@ export const useGameStore = create<GameStore>()(
           return;
         }
 
-        // 获取目标回合的数据（优先使用nightDeaths字段）
+        // 获取目标回合的死亡玩家
         const targetRoundData = currentGame.rounds.find(
           (r) => r.number === targetRound
         );
 
-        // 优先从nightDeaths字段获取死亡信息
         const nightDeaths = targetRoundData?.nightDeaths || [];
         
         if (nightDeaths.length > 0) {
@@ -1589,41 +1646,30 @@ export const useGameStore = create<GameStore>()(
 
           get().addActionLog(`昨夜死亡公布：${deadPlayerNames} 死亡`);
 
-          // 添加详细的死亡原因（只在上帝视角显示）
-          deadPlayers.forEach((player) => {
-            if (player) {
-              const reasonText =
-                player.deathReason === "werewolf_kill"
-                  ? "狼人击杀"
-                  : player.deathReason === "witch_poison"
-                  ? "女巫毒杀"
-                  : "未知原因";
-              get().addActionLog(
-                `${player.name || `玩家${player.id}`} 死于 ${reasonText}`,
-                true
-              );
+          // 第一回合特殊提示：检查死亡玩家是否当选警长
+          if (currentGame.currentRound === 1 && currentGame.sheriff) {
+            const sheriffIsDead = nightDeaths.includes(currentGame.sheriff);
+            if (sheriffIsDead) {
+              const sheriffName = currentGame.players.find(p => p.id === currentGame.sheriff)?.name || `玩家${currentGame.sheriff}`;
+              get().addActionLog(`警长 ${sheriffName} 已死亡，请选择移交警徽或撕毁警徽`);
+            }
+          }
+
+          // 标记死亡状态（如果还没有标记的话）
+          nightDeaths.forEach((playerId) => {
+            const player = currentGame.players.find(p => p.id === playerId);
+            if (player && player.isAlive) {
+              get().setPlayerAlive(playerId, false, player.deathReason || "werewolf_kill");
             }
           });
-        } else {
-          // 如果nightDeaths为空，检查是否有夜间行动但未结算
-          const hasNightActions =
-            targetRoundData?.nightActions &&
-            targetRoundData.nightActions.length > 0;
 
-          if (hasNightActions && !targetRoundData?.isNightResolved) {
-            get().addActionLog(
-              "检测到有夜间行动记录，但还没有进行夜晚行动结算。请先进行夜晚行动结算，然后再公布死亡信息。"
-            );
-            return;
-          } else {
-            // 没有死亡或已经结算过
-            get().addActionLog("昨夜平安，无人死亡");
-          }
+        } else {
+          get().addActionLog("昨夜平安，无人死亡");
         }
 
         // 第一回合特殊提示
         if (currentGame.currentRound === 1) {
-          get().addActionLog("第一晚结果公布完毕，现在开始白天讨论和投票");
+          get().addActionLog("第一晚死讯公布完毕，现在开始白天讨论和投票");
         }
       },
 

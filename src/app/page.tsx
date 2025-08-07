@@ -3,13 +3,14 @@
 import React, { useState } from "react";
 import { useGameStore } from "@/store/gameStore";
 import { PlayerCard } from "@/components/PlayerCard";
-import { RoleSelector } from "@/components/RoleSelector";
+import { RoleSelectorModal } from "@/components/RoleSelectorModal";
 import { GameControlPanel } from "@/components/GameControlPanel";
 import { VotingPanel } from "@/components/VotingPanel";
 import { NightActionPanel } from "@/components/NightActionPanel";
 import { SheriffElectionPanel } from "@/components/SheriffElectionPanel";
 import { GameLogPanel } from "@/components/GameLogPanel";
 import { NightResultsPanel } from "@/components/NightResultsPanel";
+import { GameSummary } from "@/components/GameSummary";
 import { RoleType } from "@/types/game";
 import { ROLE_CONFIGS } from "@/lib/constants";
 import {
@@ -24,6 +25,7 @@ import {
   Shield,
   FileText,
   RotateCcw,
+  Trophy,
 } from "lucide-react";
 
 export default function Home() {
@@ -47,6 +49,7 @@ export default function Home() {
   const [gameName, setGameName] = useState("");
   const [selectedConfig, setSelectedConfig] = useState(0);
   const [showGameLog, setShowGameLog] = useState(false);
+  const [showGameSummary, setShowGameSummary] = useState(false);
 
   // 根据游戏状态自动设置活动标签页
   const getActiveTab = (): "day" | "night" | "sheriff" | "log" | "results" => {
@@ -230,6 +233,16 @@ export default function Home() {
             </div>
 
             <div className="flex items-center space-x-4">
+              {currentGame.status === "finished" && (
+                <button
+                  onClick={() => setShowGameSummary(true)}
+                  className="flex items-center space-x-2 px-3 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors duration-200 font-medium"
+                >
+                  <Trophy className="w-4 h-4" />
+                  <span>查看总结</span>
+                </button>
+              )}
+
               <button
                 onClick={() => setShowRoles(!showRoles)}
                 className="flex items-center space-x-2 px-3 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg transition-colors duration-200 text-gray-900 font-medium"
@@ -360,7 +373,13 @@ export default function Home() {
               <button
                 onClick={() => {
                   if (confirm("确定要结束当前游戏吗？")) {
-                    finishGame();
+                    const winner = prompt("请输入获胜阵营 (villagers/werewolves):");
+                    if (winner === "villagers" || winner === "werewolves") {
+                      finishGame(winner);
+                      setShowGameSummary(true);
+                    } else if (winner !== null) {
+                      alert("请输入正确的阵营: villagers 或 werewolves");
+                    }
                   }
                 }}
                 className="w-full bg-red-600 hover:bg-red-700 text-white font-medium py-3 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
@@ -369,36 +388,33 @@ export default function Home() {
                 <span>结束游戏</span>
               </button>
             </div>
-
-            {/* 角色选择 */}
-            {selectedPlayer && (
-              <div className="bg-white rounded-lg shadow-lg p-6">
-                <h3 className="text-lg font-bold mb-4">
-                  为{" "}
-                  {currentGame.players.find((p) => p.id === selectedPlayer)
-                    ?.name || `玩家${selectedPlayer}`}{" "}
-                  选择身份
-                </h3>
-                <RoleSelector
-                  selectedRole={
-                    currentGame.players.find((p) => p.id === selectedPlayer)
-                      ?.role
-                  }
-                  onRoleSelect={handleRoleSelect}
-                  roleConfig={currentGame.roleConfig}
-                  selectedRoleCounts={getSelectedRoleCounts()}
-                />
-                <button
-                  onClick={() => setSelectedPlayer(null)}
-                  className="w-full mt-4 bg-gray-300 hover:bg-gray-400 text-gray-700 font-medium py-2 px-4 rounded-lg transition-colors duration-200"
-                >
-                  取消
-                </button>
-              </div>
-            )}
           </div>
         </div>
       </div>
+
+      {/* 角色选择弹窗 */}
+      <RoleSelectorModal
+        isOpen={selectedPlayer !== null}
+        onClose={() => setSelectedPlayer(null)}
+        playerName={
+          currentGame.players.find((p) => p.id === selectedPlayer)?.name ||
+          `玩家${selectedPlayer}`
+        }
+        selectedRole={
+          currentGame.players.find((p) => p.id === selectedPlayer)?.role
+        }
+        onRoleSelect={handleRoleSelect}
+        roleConfig={currentGame.roleConfig}
+        selectedRoleCounts={getSelectedRoleCounts()}
+      />
+
+      {/* 游戏总结弹窗 */}
+      {showGameSummary && (
+        <GameSummary
+          game={currentGame}
+          onClose={() => setShowGameSummary(false)}
+        />
+      )}
     </div>
   );
 }

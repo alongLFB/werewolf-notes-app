@@ -11,6 +11,7 @@ export const NightActionPanel: React.FC = () => {
     addNightAction,
     resolveNightActions,
     isCurrentRoundResolved,
+    getWitchPotionStatus,
   } = useGameStore();
 
   const [selectedActor, setSelectedActor] = useState<number | null>(null);
@@ -25,7 +26,7 @@ export const NightActionPanel: React.FC = () => {
   const alivePlayers = getAlivePlayers();
 
   // 根据角色获取可执行的行动类型
-  const getAvailableActions = (role: string | undefined) => {
+  const getAvailableActions = (role: string | undefined, playerId?: number) => {
     if (!role) return [];
 
     switch (role) {
@@ -36,10 +37,17 @@ export const NightActionPanel: React.FC = () => {
       case "seer":
         return [{ value: "seer_check", label: "查验身份" }];
       case "witch":
-        return [
-          { value: "witch_save", label: "使用解药救人" },
-          { value: "witch_poison", label: "使用毒药毒人" },
-        ];
+        const actions = [];
+        if (playerId) {
+          const potionStatus = getWitchPotionStatus(playerId);
+          if (potionStatus?.hasAntidote) {
+            actions.push({ value: "witch_save", label: "使用解药救人" });
+          }
+          if (potionStatus?.hasPoison) {
+            actions.push({ value: "witch_poison", label: "使用毒药毒人" });
+          }
+        }
+        return actions;
       case "guard":
         return [{ value: "guard_protect", label: "守护保护" }];
       default:
@@ -51,7 +59,7 @@ export const NightActionPanel: React.FC = () => {
   const selectedActorPlayer = selectedActor
     ? alivePlayers.find((p) => p.id === selectedActor)
     : null;
-  const availableActions = getAvailableActions(selectedActorPlayer?.role);
+  const availableActions = getAvailableActions(selectedActorPlayer?.role, selectedActorPlayer?.id);
 
   // 当选择行动者时，自动重置行动类型
   const handleActorChange = (actorId: number | null) => {
@@ -116,8 +124,8 @@ export const NightActionPanel: React.FC = () => {
     const names = {
       werewolf_kill: "狼人击杀",
       seer_check: "预言家查验",
-      witch_save: "女巫救人",
-      witch_poison: "女巫毒人",
+      witch_save: "女巫救人（解药）",
+      witch_poison: "女巫毒人（毒药）",
       guard_protect: "守卫保护",
     };
     return names[type as keyof typeof names] || type;
@@ -163,9 +171,24 @@ export const NightActionPanel: React.FC = () => {
                 )
                 .map((player) => {
                   const role = player.role ? ROLES[player.role] : null;
+                  let displayText = `${player.name || `玩家${player.id}`} (${role?.name})`;
+                  
+                  // 为女巫显示药品状态
+                  if (player.role === "witch") {
+                    const potionStatus = getWitchPotionStatus(player.id);
+                    const potions = [];
+                    if (potionStatus?.hasAntidote) potions.push("解药");
+                    if (potionStatus?.hasPoison) potions.push("毒药");
+                    if (potions.length > 0) {
+                      displayText += ` [${potions.join("、")}]`;
+                    } else {
+                      displayText += " [无药品]";
+                    }
+                  }
+                  
                   return (
                     <option key={player.id} value={player.id}>
-                      {player.name || `玩家${player.id}`} ({role?.name})
+                      {displayText}
                     </option>
                   );
                 })}
@@ -202,7 +225,16 @@ export const NightActionPanel: React.FC = () => {
           <label className="block text-sm font-medium text-gray-800 mb-2">
             目标玩家
             {actionType === "witch_save" && " (通常是被狼人击杀的玩家)"}
+            {actionType === "witch_poison" && " (选择要毒杀的玩家)"}
           </label>
+          
+          {/* 女巫救人的特殊提示 */}
+          {actionType === "witch_save" && (
+            <div className="mb-2 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm text-yellow-800">
+              💡 提示：女巫救人需要在狼人击杀后进行。请先记录狼人击杀行动，再选择是否使用解药救人。
+            </div>
+          )}
+          
           <select
             value={selectedTarget || ""}
             onChange={(e) =>
@@ -263,10 +295,24 @@ export const NightActionPanel: React.FC = () => {
           <span>记录行动</span>
         </button>
 
+        {/* 夜晚结算说明 */}
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+          <h4 className="font-medium text-blue-800 mb-2 flex items-center">
+            <Moon className="w-4 h-4 mr-2" />
+            夜晚结算规则
+          </h4>
+          <ul className="text-sm text-blue-700 space-y-1">
+            <li>• 1. 女巫毒杀：优先级最高，无法阻挡</li>
+            <li>• 2. 狼人击杀：会被女巫解药或守卫保护阻止</li>
+            <li>• 3. 守卫+解药：同时作用会导致目标死亡</li>
+            <li>• 4. 结算后女巫使用的药品将消失</li>
+          </ul>
+        </div>
+
         {/* 夜晚结算按钮 */}
         <button
           onClick={() => {
-            if (confirm("确定要结算夜晚行动吗？这将处理所有夜间行动的结果。")) {
+            if (confirm("确定要结算夜晚行动吗？这将处理所有夜间行动的结果，并消耗女巫使用的药品。")) {
               resolveNightActions();
             }
           }}

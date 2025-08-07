@@ -126,6 +126,28 @@ export const GameControlPanel: React.FC = () => {
 
       {/* 游戏控制按钮 */}
       <div className="space-y-2">
+        {/* 死亡公布按钮 - 第一回合特殊处理 */}
+        {isDay && currentGame.currentRound === 1 && currentGame.sheriff && (
+          <button
+            onClick={announceNightDeaths}
+            className="w-full bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
+          >
+            <AlertCircle className="w-4 h-4" />
+            <span>公布第一晚死讯（警上发言后）</span>
+          </button>
+        )}
+
+        {/* 其他回合的死亡公布 */}
+        {isDay && currentGame.currentRound > 1 && (
+          <button
+            onClick={announceNightDeaths}
+            className="w-full bg-gray-500 hover:bg-gray-600 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
+          >
+            <AlertCircle className="w-4 h-4" />
+            <span>公布昨夜死亡</span>
+          </button>
+        )}
+
         {/* 主要阶段转换按钮 */}
         <button
           onClick={handlePhaseChange}
@@ -134,19 +156,6 @@ export const GameControlPanel: React.FC = () => {
           <SkipForward className="w-4 h-4" />
           <span>{isDay ? "进入夜晚" : "进入白天"}</span>
         </button>
-
-        {/* 死亡公布按钮 */}
-        {isDay && (
-          <button
-            onClick={() => {
-              announceNightDeaths();
-            }}
-            className="w-full bg-orange-500 hover:bg-orange-600 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
-          >
-            <AlertCircle className="w-4 h-4" />
-            <span>公布昨夜死亡</span>
-          </button>
-        )}
 
         {currentGame.status === "finished" && (
           <div className="w-full bg-yellow-100 border border-yellow-300 text-yellow-800 font-medium py-2 px-4 rounded-lg flex items-center justify-center space-x-2">

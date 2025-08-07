@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useGameStore } from "@/store/gameStore";
-import { Vote, Target, Users } from "lucide-react";
+import { Vote, Target, Users, CheckCircle, Bomb } from "lucide-react";
 
 export const VotingPanel: React.FC = () => {
   const {
@@ -14,314 +14,332 @@ export const VotingPanel: React.FC = () => {
     explodeWerewolf,
   } = useGameStore();
 
-  const [selectedVoter, setSelectedVoter] = useState<number | null>(null);
-  const [selectedTarget, setSelectedTarget] = useState<
-    number | "abstain" | null
-  >(null);
-  const [showResults, setShowResults] = useState(false);
+  const [voterSelections, setVoterSelections] = useState<{
+    [voterId: number]: number | "abstain" | null;
+  }>({});
 
   if (!currentGame || currentGame.currentPhase !== "day") return null;
 
   const alivePlayers = getAlivePlayers();
   const currentRound = getCurrentRound();
   const votes = currentRound?.votes || [];
+  const sheriff = currentGame.sheriff;
 
   // 统计投票结果
-  const voteCount: { [key: number]: number } = {};
-  const abstainCount = { abstain: 0 };
+  const voteCount: { [key: string]: number } = {};
   const voterChoices: { [key: number]: number | "abstain" } = {};
 
   votes.forEach((vote) => {
+    const voterId = vote.voterId;
+    const voteWeight = sheriff === voterId ? 1.5 : 1;
+    
     if (vote.targetId === "abstain") {
-      abstainCount.abstain += 1;
+      voteCount["abstain"] = (voteCount["abstain"] || 0) + voteWeight;
     } else {
-      voteCount[vote.targetId as number] =
-        (voteCount[vote.targetId as number] || 0) + 1;
+      const targetKey = vote.targetId.toString();
+      voteCount[targetKey] = (voteCount[targetKey] || 0) + voteWeight;
     }
-    voterChoices[vote.voterId] = vote.targetId;
+    voterChoices[voterId] = vote.targetId;
   });
 
-  const handleVote = () => {
-    if (selectedVoter && selectedTarget) {
-      addVote(selectedVoter, selectedTarget);
-      setSelectedVoter(null);
-      setSelectedTarget(null);
-    }
+  const handleVote = (voterId: number, targetId: number | "abstain") => {
+    addVote(voterId, targetId);
+    setVoterSelections((prev) => {
+      const newSelections = { ...prev };
+      delete newSelections[voterId];
+      return newSelections;
+    });
   };
 
   const handleEliminate = (playerId: number) => {
     eliminatePlayer(playerId);
-    setShowResults(false);
   };
 
   // 找出得票最多的玩家
-  const maxVotes = Math.max(...Object.values(voteCount), 0);
+  const maxVotes = Math.max(...Object.values(voteCount).filter(v => typeof v === 'number'), 0);
   const topCandidates = Object.entries(voteCount)
-    .filter(([, count]) => count === maxVotes && maxVotes > 0)
+    .filter(([key, count]) => key !== "abstain" && count === maxVotes && maxVotes > 0)
     .map(([playerId]) => parseInt(playerId));
 
+  // 检查是否所有人都已投票
+  const isAllVoted = () => {
+    return alivePlayers.every((player) => voterChoices.hasOwnProperty(player.id));
+  };
+
+  // 计算总票数（考虑警长权重）
+  const getTotalPossibleVotes = () => {
+    return alivePlayers.reduce((total, player) => {
+      return total + (sheriff === player.id ? 1.5 : 1);
+    }, 0);
+  };
+
   return (
-    <div className="bg-white rounded-lg shadow-lg p-6 space-y-6">
+    <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h3 className="text-lg font-bold flex items-center space-x-2 text-gray-900">
           <Vote className="w-5 h-5 text-blue-500" />
-          <span>投票记录</span>
+          <span>白天投票</span>
         </h3>
-        <button
-          onClick={() => setShowResults(!showResults)}
-          className="text-sm bg-gray-200 hover:bg-gray-300 px-3 py-1 rounded-lg transition-colors duration-200 text-gray-900 font-medium"
-        >
-          {showResults ? "隐藏结果" : "显示结果"}
-        </button>
+        {isAllVoted() && !isCurrentRoundResolved() && (
+          <button
+            onClick={() => {
+              if (confirm("确定要结算白天投票吗？这将统计投票结果并确定出局玩家。")) {
+                resolveDayVoting();
+              }
+            }}
+            className="bg-green-600 hover:bg-green-700 text-white text-sm px-4 py-2 rounded-lg transition-colors duration-200 flex items-center space-x-1 font-medium"
+          >
+            <CheckCircle className="w-4 h-4" />
+            <span>结算投票</span>
+          </button>
+        )}
       </div>
 
-      {/* 投票记录表单 */}
-      <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4">
-          {/* 投票者选择 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-800 mb-2">
-              投票者
-            </label>
-            <select
-              value={selectedVoter || ""}
-              onChange={(e) =>
-                setSelectedVoter(
-                  e.target.value ? parseInt(e.target.value) : null
-                )
-              }
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-            >
-              <option value="">选择投票者</option>
-              {alivePlayers.map((player) => (
-                <option key={player.id} value={player.id}>
-                  {player.name || `玩家${player.id}`} ({player.id}号)
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* 投票目标选择 */}
-          <div>
-            <label className="block text-sm font-medium text-gray-800 mb-2">
-              投票目标
-            </label>
-            <select
-              value={selectedTarget || ""}
-              onChange={(e) =>
-                setSelectedTarget(
-                  e.target.value === ""
-                    ? null
-                    : e.target.value === "abstain"
-                    ? "abstain"
-                    : parseInt(e.target.value)
-                )
-              }
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-blue-500 focus:border-transparent text-gray-900"
-            >
-              <option value="">选择投票目标</option>
-              {alivePlayers.map((player) => (
-                <option key={player.id} value={player.id}>
-                  {player.name || `玩家${player.id}`} ({player.id}号)
-                </option>
-              ))}
-              <option value="abstain">弃票</option>
-            </select>
-          </div>
+      {/* 投票区域 */}
+      <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-4">
+        <div className="flex items-center justify-between">
+          <h4 className="font-medium text-blue-900">玩家投票</h4>
+          {isCurrentRoundResolved() && (
+            <span className="text-sm text-green-600 font-medium bg-green-100 px-2 py-1 rounded">
+              ✅ 已结算
+            </span>
+          )}
         </div>
 
-        <button
-          onClick={handleVote}
-          disabled={!selectedVoter || !selectedTarget}
-          className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:text-gray-200 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200"
-        >
-          记录投票
-        </button>
+        {/* 玩家投票列表 */}
+        <div className="space-y-3">
+          {alivePlayers.map((voter) => {
+            const hasVoted = voterChoices.hasOwnProperty(voter.id);
+            const votedFor = voterChoices[voter.id];
+            const currentSelection = voterSelections[voter.id] || null;
+            const isSheriff = sheriff === voter.id;
 
-        {/* 白天结算按钮 */}
-        <button
-          onClick={() => {
-            if (
-              confirm("确定要结算白天投票吗？这将统计投票结果并确定出局玩家。")
-            ) {
-              resolveDayVoting();
-            }
-          }}
-          disabled={votes.length === 0 || isCurrentRoundResolved()}
-          className="w-full bg-orange-600 hover:bg-orange-700 disabled:bg-gray-400 disabled:text-gray-200 text-white font-medium py-2 px-4 rounded-lg transition-colors duration-200 flex items-center justify-center space-x-2"
-        >
-          <Users className="w-4 h-4" />
-          <span>
-            {isCurrentRoundResolved() ? "白天已结算" : "结算白天投票"}
-          </span>
-        </button>
-      </div>
-
-      {/* 狼人自爆 */}
-      <div className="border-t pt-6">
-        <h3 className="text-lg font-bold text-gray-900 mb-4">狼人自爆</h3>
-        <div className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-800 mb-2">
-              选择自爆的狼人
-            </label>
-            <select
-              onChange={(e) => {
-                const playerId = parseInt(e.target.value);
-                if (
-                  playerId &&
-                  confirm(
-                    `确定让 ${
-                      alivePlayers.find((p) => p.id === playerId)?.name ||
-                      `玩家${playerId}`
-                    } 自爆吗？自爆后将影响警长竞选规则。`
-                  )
-                ) {
-                  explodeWerewolf(playerId);
-                }
-                e.target.value = ""; // 重置选择
-              }}
-              className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:ring-2 focus:ring-red-500 focus:border-transparent text-gray-900"
-            >
-              <option value="">选择要自爆的狼人...</option>
-              {alivePlayers
-                .filter(
-                  (p) =>
-                    p.role === "werewolf" ||
-                    p.role === "dark_wolf_king" ||
-                    p.role === "white_wolf_king"
-                )
-                .map((player) => (
-                  <option key={player.id} value={player.id}>
-                    {player.name || `玩家${player.id}`} (
-                    {player.role === "werewolf"
-                      ? "狼人"
-                      : player.role === "dark_wolf_king"
-                      ? "黑狼王"
-                      : "白狼王"}
-                    )
-                  </option>
-                ))}
-            </select>
-          </div>
-          <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg">
-            ⚠️ 狼人自爆会影响后续的警长竞选规则，请谨慎操作
-          </div>
-        </div>
-      </div>
-
-      {/* 当前投票状态 */}
-      <div className="space-y-3">
-        <h4 className="font-medium text-gray-800">当前投票状态</h4>
-        <div className="grid grid-cols-1 gap-2">
-          {alivePlayers.map((player) => {
-            const votedFor = voterChoices[player.id];
-            let displayText = "未投票";
-
+            let votedForName = null;
             if (votedFor === "abstain") {
-              displayText = "弃票";
+              votedForName = "弃票";
             } else if (typeof votedFor === "number") {
-              const targetPlayer = alivePlayers.find((p) => p.id === votedFor);
-              displayText = targetPlayer
-                ? `→ ${targetPlayer.name || `玩家${targetPlayer.id}`}`
-                : "未投票";
+              const target = alivePlayers.find((p) => p.id === votedFor);
+              votedForName = target ? `${target.name || `玩家${target.id}`}` : null;
             }
 
             return (
-              <div
-                key={player.id}
-                className="flex items-center justify-between py-2 px-3 bg-gray-100 border border-gray-200 rounded"
-              >
-                <span className="font-medium text-gray-900">
-                  {player.name || `玩家${player.id}`}
-                </span>
-                <span className="text-sm text-gray-700 font-medium">
-                  {displayText}
-                </span>
+              <div key={voter.id} className="bg-white rounded-lg p-3 border">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2">
+                    <span className="font-medium text-gray-900">
+                      {voter.name || `玩家${voter.id}`} ({voter.id}号)
+                    </span>
+                    {isSheriff && (
+                      <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded font-bold">
+                        警长 (1.5票)
+                      </span>
+                    )}
+                    {hasVoted && (
+                      <span className="text-sm text-green-600 bg-green-100 px-2 py-1 rounded font-medium">
+                        已投: {votedForName}
+                      </span>
+                    )}
+                  </div>
+
+                  {!hasVoted && !isCurrentRoundResolved() && (
+                    <div className="flex items-center space-x-2">
+                      <select
+                        value={currentSelection || ""}
+                        onChange={(e) =>
+                          setVoterSelections((prev) => ({
+                            ...prev,
+                            [voter.id]: e.target.value
+                              ? e.target.value === "abstain"
+                                ? "abstain"
+                                : parseInt(e.target.value)
+                              : null,
+                          }))
+                        }
+                        className="text-sm border border-gray-300 rounded px-2 py-1 text-gray-900 font-medium"
+                      >
+                        <option value="" className="text-gray-500">
+                          选择投票目标
+                        </option>
+                        <option value="abstain" className="text-orange-600 font-medium">
+                          弃票
+                        </option>
+                        {alivePlayers.map((target) => (
+                          <option
+                            key={target.id}
+                            value={target.id}
+                            className="text-gray-900 font-medium"
+                          >
+                            {target.name || `玩家${target.id}`} ({target.id}号)
+                          </option>
+                        ))}
+                      </select>
+                      <button
+                        onClick={() => {
+                          if (currentSelection) {
+                            handleVote(voter.id, currentSelection);
+                          }
+                        }}
+                        disabled={!currentSelection}
+                        className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white text-sm px-3 py-1 rounded transition-colors duration-200"
+                      >
+                        投票
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             );
           })}
         </div>
-      </div>
 
-      {/* 投票结果统计 */}
-      {showResults && votes.length > 0 && (
-        <div className="space-y-3">
-          <h4 className="font-medium text-gray-800">投票结果统计</h4>
-          <div className="space-y-2">
-            {Object.entries(voteCount)
-              .sort(([, a], [, b]) => b - a)
-              .map(([playerId, count]) => {
-                const player = alivePlayers.find(
-                  (p) => p.id === parseInt(playerId)
-                );
-                if (!player) return null;
+        {/* 投票进度 */}
+        <div className="bg-white rounded-lg p-3 border">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-gray-600">投票进度：</span>
+            <span className="font-medium">
+              {Object.keys(voterChoices).length} / {alivePlayers.length}
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+            <div
+              className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+              style={{
+                width: `${
+                  (Object.keys(voterChoices).length / alivePlayers.length) * 100
+                }%`,
+              }}
+            ></div>
+          </div>
+        </div>
 
-                const isTopCandidate = topCandidates.includes(
-                  parseInt(playerId)
-                );
+        {/* 实时票数统计 */}
+        {Object.keys(voterChoices).length > 0 && (
+          <div className="bg-white rounded-lg p-3 border">
+            <h5 className="text-sm font-medium text-gray-800 mb-3">
+              当前票数统计：
+            </h5>
+            <div className="space-y-2">
+              {Object.entries(voteCount)
+                .filter(([key]) => key !== "abstain")
+                .map(([playerId, count]) => {
+                  const player = alivePlayers.find((p) => p.id === parseInt(playerId));
+                  if (!player) return null;
+                  const percentage = (count / getTotalPossibleVotes()) * 100;
+                  const isTop = topCandidates.includes(parseInt(playerId));
 
-                return (
-                  <div
-                    key={playerId}
-                    className={`flex items-center justify-between py-2 px-3 rounded ${
-                      isTopCandidate
-                        ? "bg-red-100 border border-red-300"
-                        : "bg-gray-100 border border-gray-200"
-                    }`}
-                  >
-                    <span
-                      className={`font-medium ${
-                        isTopCandidate ? "text-red-900" : "text-gray-900"
-                      }`}
-                    >
-                      {player.name || `玩家${player.id}`}
-                    </span>
-                    <div className="flex items-center space-x-3">
-                      <span
-                        className={`font-bold ${
-                          isTopCandidate ? "text-red-700" : "text-gray-700"
-                        }`}
-                      >
-                        {count} 票
-                      </span>
-                      {isTopCandidate && maxVotes > 0 && (
-                        <button
-                          onClick={() => handleEliminate(parseInt(playerId))}
-                          className="bg-red-600 hover:bg-red-700 text-white text-sm px-3 py-1 rounded transition-colors duration-200 font-medium"
-                        >
-                          出局
-                        </button>
-                      )}
+                  return (
+                    <div key={playerId} className="space-y-1">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className={`font-medium ${isTop ? "text-red-700" : "text-gray-900"}`}>
+                          {player.name || `玩家${playerId}`}
+                        </span>
+                        <div className="flex items-center space-x-2">
+                          <span className={`font-bold ${isTop ? "text-red-600" : "text-blue-600"}`}>
+                            {count}票 ({percentage.toFixed(1)}%)
+                          </span>
+                          {isTop && isCurrentRoundResolved() && (
+                            <button
+                              onClick={() => handleEliminate(parseInt(playerId))}
+                              className="bg-red-600 hover:bg-red-700 text-white text-xs px-2 py-1 rounded transition-colors duration-200"
+                            >
+                              出局
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                      <div className="w-full bg-gray-200 rounded-full h-2">
+                        <div
+                          className={`h-2 rounded-full transition-all duration-300 ${
+                            isTop ? "bg-red-500" : "bg-blue-600"
+                          }`}
+                          style={{ width: `${percentage}%` }}
+                        ></div>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
+                  );
+                })
+                .filter(Boolean)}
 
-            {/* 显示弃票统计 */}
-            {abstainCount.abstain > 0 && (
-              <div className="flex items-center justify-between py-2 px-3 bg-yellow-100 border border-yellow-300 rounded">
-                <span className="font-medium text-yellow-900">弃票</span>
-                <span className="font-bold text-yellow-700">
-                  {abstainCount.abstain} 票
-                </span>
+              {/* 弃票统计 */}
+              {voteCount["abstain"] > 0 && (
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="font-medium text-orange-600">弃票</span>
+                    <span className="font-bold text-orange-600">
+                      {voteCount["abstain"]}票 (
+                      {((voteCount["abstain"] / getTotalPossibleVotes()) * 100).toFixed(1)}%)
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-2">
+                    <div
+                      className="bg-orange-500 h-2 rounded-full transition-all duration-300"
+                      style={{
+                        width: `${(voteCount["abstain"] / getTotalPossibleVotes()) * 100}%`,
+                      }}
+                    ></div>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {topCandidates.length > 1 && maxVotes > 0 && (
+              <div className="text-sm text-orange-600 bg-orange-50 p-3 rounded-lg mt-3">
+                <Target className="w-4 h-4 inline mr-2" />
+                平票！需要重新投票或由法官/警长决定
               </div>
             )}
           </div>
+        )}
+      </div>
 
-          {topCandidates.length > 1 && maxVotes > 0 && (
-            <div className="text-sm text-orange-600 bg-orange-50 p-3 rounded-lg">
-              <Target className="w-4 h-4 inline mr-2" />
-              平票！需要重新投票或由法官决定
+      {/* 狼人自爆区域 */}
+      <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+        <h4 className="font-medium text-red-900 mb-3 flex items-center space-x-2">
+          <Bomb className="w-4 h-4" />
+          <span>狼人自爆</span>
+        </h4>
+        <p className="text-sm text-red-700 mb-3">
+          狼人可以选择自爆，自爆后将直接跳过当前白天，进入下一回合夜晚。
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {alivePlayers
+            .filter(
+              (player) =>
+                player.role === "werewolf" ||
+                player.role === "dark_wolf_king" ||
+                player.role === "white_wolf_king"
+            )
+            .map((player) => (
+              <button
+                key={player.id}
+                onClick={() => {
+                  if (
+                    confirm(
+                      `确定让 ${player.name || `玩家${player.id}`} 自爆吗？自爆后将直接进入夜晚。`
+                    )
+                  ) {
+                    explodeWerewolf(player.id);
+                  }
+                }}
+                className="bg-red-600 hover:bg-red-700 text-white text-sm px-3 py-2 rounded transition-colors duration-200 flex items-center justify-center space-x-1"
+              >
+                <Bomb className="w-3 h-3" />
+                <span>
+                  {player.name || `玩家${player.id}`} 自爆
+                </span>
+              </button>
+            ))}
+          {alivePlayers.filter(
+            (player) =>
+              player.role === "werewolf" ||
+              player.role === "dark_wolf_king" ||
+              player.role === "white_wolf_king"
+          ).length === 0 && (
+            <div className="col-span-2 text-center text-sm text-red-600">
+              没有存活的狼人可以自爆
             </div>
           )}
         </div>
-      )}
-
-      {/* 投票统计信息 */}
-      <div className="text-sm text-gray-600 bg-gray-50 p-3 rounded-lg">
-        <Users className="w-4 h-4 inline mr-2" />
-        已投票: {Object.keys(voterChoices).length} / {alivePlayers.length}
       </div>
     </div>
   );
